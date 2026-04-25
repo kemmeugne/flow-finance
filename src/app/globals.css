@@ -18,11 +18,6 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -43,55 +38,69 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
+
+  /* Sage green scale — muted, sophisticated */
+  --color-sage-50:  oklch(0.975 0.010 150);
+  --color-sage-100: oklch(0.948 0.018 150);
+  --color-sage-200: oklch(0.898 0.028 150);
+  --color-sage-300: oklch(0.820 0.050 151);
+  --color-sage-400: oklch(0.710 0.068 151);
+  --color-sage-500: oklch(0.608 0.082 152);
+  --color-sage-600: oklch(0.520 0.082 153);
+  --color-sage-700: oklch(0.418 0.068 154);
+  --color-sage-800: oklch(0.308 0.050 155);
+  --color-sage-900: oklch(0.222 0.038 156);
+  --color-sage-950: oklch(0.158 0.028 157);
 }
 
 :root {
-  /* Indigo-500 primary */
-  --primary: oklch(0.585 0.233 277.117);
+  /* Sage green as primary action color */
+  --primary: oklch(0.520 0.082 153);          /* sage-600 */
   --primary-foreground: oklch(0.985 0 0);
 
-  --background: oklch(0.978 0.003 247.858);  /* slate-50 */
-  --foreground: oklch(0.208 0.016 259.815);  /* slate-900 */
+  /* Sage-tinted page background */
+  --background: oklch(0.975 0.010 150);       /* sage-50 */
+  --foreground: oklch(0.222 0.038 156);       /* sage-900 */
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.208 0.016 259.815);
+  --card-foreground: oklch(0.222 0.038 156);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.016 259.815);
+  --popover-foreground: oklch(0.222 0.038 156);
 
-  --secondary: oklch(0.948 0.008 247.858);   /* slate-100 */
-  --secondary-foreground: oklch(0.372 0.022 259.813);
+  --secondary: oklch(0.948 0.018 150);        /* sage-100 */
+  --secondary-foreground: oklch(0.418 0.068 154);
 
-  --muted: oklch(0.948 0.008 247.858);
-  --muted-foreground: oklch(0.554 0.022 259.813);  /* slate-500 */
+  --muted: oklch(0.948 0.018 150);            /* sage-100 */
+  --muted-foreground: oklch(0.608 0.082 152); /* sage-500 */
 
-  --accent: oklch(0.948 0.008 247.858);
-  --accent-foreground: oklch(0.208 0.016 259.815);
+  --accent: oklch(0.948 0.018 150);
+  --accent-foreground: oklch(0.222 0.038 156);
 
-  --destructive: oklch(0.577 0.245 27.325);  /* red */
+  --destructive: oklch(0.577 0.245 27.325);
 
-  --border: oklch(0.897 0.008 247.858);   /* slate-200 */
-  --input: oklch(0.897 0.008 247.858);
-  --ring: oklch(0.585 0.233 277.117);     /* indigo ring */
+  --border: oklch(0.898 0.028 150);           /* sage-200 */
+  --input: oklch(0.898 0.028 150);
+  --ring: oklch(0.520 0.082 153);             /* sage-600 */
 
   --radius: 0.625rem;
 
-  /* Dark slate sidebar */
-  --sidebar: oklch(0.208 0.016 259.815);          /* slate-900 */
-  --sidebar-foreground: oklch(0.897 0.008 247.858); /* slate-200 */
-  --sidebar-primary: oklch(0.585 0.233 277.117);  /* indigo-500 */
+  /* Deep forest sidebar */
+  --sidebar: oklch(0.222 0.038 156);          /* sage-900 */
+  --sidebar-foreground: oklch(0.820 0.050 151);
+  --sidebar-primary: oklch(0.608 0.082 152);  /* sage-500 */
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.270 0.016 260.031);   /* slate-800 */
+  --sidebar-accent: oklch(0.308 0.050 155);   /* sage-800 */
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.270 0.016 260.031);   /* slate-800 */
-  --sidebar-ring: oklch(0.585 0.233 277.117);
+  --sidebar-border: oklch(0.308 0.050 155);   /* sage-800 */
+  --sidebar-ring: oklch(0.608 0.082 152);
 
-  /* Chart colors */
-  --chart-1: oklch(0.585 0.233 277.117);  /* indigo */
-  --chart-2: oklch(0.696 0.17 162.48);   /* emerald */
-  --chart-3: oklch(0.769 0.188 70.08);   /* amber */
-  --chart-4: oklch(0.627 0.265 303.9);   /* violet */
-  --chart-5: oklch(0.577 0.245 27.325);  /* red */
+  /* Chart colors — keep distinct functional colors */
+  --chart-1: oklch(0.520 0.082 153);  /* sage */
+  --chart-2: oklch(0.696 0.17 162);   /* emerald */
+  --chart-3: oklch(0.769 0.188 70);   /* amber */
+  --chart-4: oklch(0.627 0.265 304);  /* violet */
+  --chart-5: oklch(0.577 0.245 27);   /* red */
 }
 
 @layer base {

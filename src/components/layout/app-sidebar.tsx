@@ -8,7 +8,7 @@ import {
   PlusCircle,
   Target,
   LogOut,
-  Wallet,
+  Leaf,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -32,16 +32,20 @@ export function SidebarContent() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 text-slate-200">
+    <div className="flex flex-col h-full bg-sage-900 text-sage-300">
+
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 py-5 border-b border-slate-800">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500 shrink-0">
-          <Wallet className="w-4 h-4 text-white" />
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-sage-800">
+        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-sage-600 shrink-0">
+          <Leaf className="w-4 h-4 text-white" />
         </div>
-        <span className="text-white font-semibold text-base tracking-tight">Flow Finance</span>
+        <div>
+          <span className="text-white font-semibold text-sm tracking-tight block">Flow Finance</span>
+          <span className="text-sage-500 text-xs">Personal budget</span>
+        </div>
       </div>
 
-      {/* Nav */}
+      {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {navItems.map(item => {
           const active = pathname === item.href
@@ -50,10 +54,10 @@ export function SidebarContent() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                 active
-                  ? 'bg-indigo-500 text-white'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  ? 'bg-sage-600 text-white shadow-sm'
+                  : 'text-sage-400 hover:bg-sage-800 hover:text-sage-100'
               )}
             >
               <item.icon className="w-4 h-4 shrink-0" />
@@ -63,11 +67,11 @@ export function SidebarContent() {
         })}
       </nav>
 
-      {/* Sign out */}
-      <div className="px-3 py-4 border-t border-slate-800">
+      {/* Bottom: sign out */}
+      <div className="px-3 py-4 border-t border-sage-800">
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-sage-500 hover:bg-sage-800 hover:text-sage-200 transition-all duration-150"
         >
           <LogOut className="w-4 h-4 shrink-0" />
           Sign out
