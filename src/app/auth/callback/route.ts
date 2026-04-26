@@ -9,6 +9,10 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = await createClient()
     await supabase.auth.exchangeCodeForSession(code)
+    // Email confirmed — sign out so the user must log in explicitly
+    if (next === '/welcome') {
+      await supabase.auth.signOut()
+    }
   }
 
   return NextResponse.redirect(`${origin}${next}`)

@@ -60,9 +60,9 @@ export default function WelcomePage() {
 
           {/* Headline */}
           <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-sage-900">You&apos;re all set!</h2>
+            <h2 className="text-2xl font-bold text-sage-900">Email confirmed!</h2>
             <p className="text-sage-500 text-sm leading-relaxed">
-              Your account is confirmed and your budget is ready. 24 categories have been created for you — customise them, then enter your first income to get started.
+              Your account is ready. Sign in with your password to access your budget dashboard.
             </p>
           </div>
 
@@ -88,10 +88,10 @@ export default function WelcomePage() {
 
           {/* CTA */}
           <Link
-            href="/dashboard"
+            href="/login"
             className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-sage-600 hover:bg-sage-700 text-white font-medium text-sm rounded-lg transition-colors"
           >
-            Go to my dashboard
+            Sign in to your account
             <ArrowRight className="w-4 h-4" />
           </Link>
 
