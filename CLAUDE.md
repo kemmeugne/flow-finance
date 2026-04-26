@@ -4,7 +4,7 @@
 
 ## What this app is
 
-A personal finance web app for people with **variable/freelance income**. The core idea: when money comes in, the app tells you exactly how to split it across your budget categories based on priorities, due dates, and current balances. Includes an AI allocation engine powered by Claude Haiku 4.5.
+A personal finance web app for people with **variable/freelance income**. The core idea: when money comes in, the app tells you exactly how to split it across your budget categories based on priorities, due dates, and current balances. Includes an AI allocation engine and an AI affordability advisor, both powered by Claude Haiku 4.5.
 
 **Target user:** Freelancers, self-employed, people with inconsistent income who want to reduce financial stress.
 
@@ -22,7 +22,7 @@ A personal finance web app for people with **variable/freelance income**. The co
 | Language | TypeScript | Full type safety |
 | Styling | Tailwind CSS v4 + shadcn/ui | Fast, consistent UI |
 | Database + Auth | Supabase | Postgres + RLS + email auth |
-| AI | Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) | Cheap (~$0.004/call), sufficient for structured JSON allocation |
+| AI | Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) | ~$0.001–0.004/call, structured JSON via forced tool_use |
 | Deployment | Vercel (auto-deploy on push to `main`) | |
 
 ---
@@ -33,6 +33,8 @@ A personal finance web app for people with **variable/freelance income**. The co
 - **`SidebarMenuButton`** uses `render` prop, not `asChild`
 - All app pages under `(app)/` use `export const dynamic = 'force-dynamic'` to prevent static prerendering with Supabase
 - Supabase client is instantiated **inside event handlers**, never at component module level (causes build-time errors)
+- **Supabase mutation types resolve as `never`** — always cast: `const db = supabase as any` before `.insert()` / `.update()`
+- **Sheet component** (`src/components/ui/sheet.tsx`) has no hardcoded max-width — consumers set their own via `className`. Use `sm:max-w-lg` for drawer panels.
 
 ---
 
@@ -41,44 +43,116 @@ A personal finance web app for people with **variable/freelance income**. The co
 ```
 src/
 ├── app/
-│   ├── (app)/                    # Authenticated route group
-│   │   ├── layout.tsx            # App shell: desktop sidebar + mobile header
-│   │   ├── dashboard/page.tsx    # Main dashboard
-│   │   ├── categories/page.tsx   # Category CRUD (stub — Week 2)
-│   │   ├── income/page.tsx       # Income entry + AI allocation (stub — Week 2)
-│   │   └── goals/page.tsx        # Goal tracking (stub — Week 4)
-│   ├── auth/callback/route.ts    # Supabase OAuth callback
-│   ├── login/page.tsx            # Split-screen login
-│   ├── signup/page.tsx           # Split-screen signup
-│   ├── globals.css               # Tailwind theme + sage color scale
-│   ├── layout.tsx                # Root layout (Geist font)
-│   └── page.tsx                  # Redirects → /dashboard
+│   ├── (app)/                        # Authenticated route group
+│   │   ├── layout.tsx                # App shell: desktop sidebar + mobile header
+│   │   ├── dashboard/page.tsx        # Dashboard: metrics, category cards, due dates, action buttons
+│   │   ├── categories/page.tsx       # Full category CRUD with dialog + archive
+│   │   ├── income/page.tsx           # 3-step income entry: form → AI allocation review → confirm
+│   │   ├── goals/page.tsx            # Goals progress: bars, monthly needed, completion state
+│   │   ├── transactions/page.tsx     # Transaction history: month picker, income/expense/net, CSV export
+│   │   └── settings/page.tsx         # Tax carve-out % slider + currency picker
+│   ├── api/
+│   │   ├── allocate/route.ts         # POST: Claude Haiku allocates income across categories
+│   │   └── afford/route.ts           # POST: Claude Haiku checks if a purchase is affordable
+│   ├── auth/callback/route.ts        # Supabase OAuth callback
+│   ├── login/page.tsx                # Split-screen login
+│   ├── signup/page.tsx               # Split-screen signup + seed_default_categories RPC
+│   ├── globals.css                   # Tailwind theme + sage color scale (@theme inline)
+│   ├── layout.tsx                    # Root layout (Geist font)
+│   └── page.tsx                      # Redirects → /dashboard
 ├── components/
 │   ├── layout/
-│   │   ├── app-sidebar.tsx       # Dark sage sidebar (SidebarContent component)
-│   │   └── mobile-header.tsx     # Mobile hamburger + Sheet drawer
-│   └── ui/                       # shadcn/ui components
+│   │   ├── app-sidebar.tsx           # Dark sage sidebar (Dashboard, Categories, Add Income, Goals, Transactions)
+│   │   ├── mobile-header.tsx         # Mobile hamburger + Sheet drawer
+│   │   ├── log-expense-button.tsx    # Sheet: log expense → deducts from category balance
+│   │   └── afford-button.tsx         # Sheet: ask Claude if a purchase is affordable
+│   └── ui/                           # shadcn/ui components (button, dialog, sheet, etc.)
 ├── lib/
-│   ├── finance.ts                # formatCurrency, urgencyScore, computeAllocations
-│   ├── group-config.ts           # Per-group colors, labels, badge styles
+│   ├── finance.ts                    # formatCurrency, urgencyScore, computeAllocations
+│   ├── group-config.ts               # Per-group colors, labels, badge styles (GROUP_CONFIG, GROUP_ORDER)
 │   ├── supabase/
-│   │   ├── client.ts             # Browser Supabase client
-│   │   ├── server.ts             # Server Supabase client (uses cookies)
-│   │   └── types.ts              # TypeScript types for all DB tables
-│   └── utils.ts                  # shadcn cn() utility
+│   │   ├── client.ts                 # createBrowserClient for client components
+│   │   ├── server.ts                 # createServerClient with cookie store for server components
+│   │   └── types.ts                  # TypeScript interfaces: Category, IncomeEvent, Allocation, Transaction, UserSettings
+│   └── utils.ts                      # shadcn cn() utility
 ├── hooks/
-│   └── use-mobile.ts             # Mobile breakpoint hook
-└── proxy.ts                      # Auth guard (Next.js 16 middleware replacement)
+│   └── use-mobile.ts                 # Mobile breakpoint hook
+└── proxy.ts                          # Auth guard (Next.js 16 middleware replacement)
 
 supabase/
-└── schema.sql                    # Full DB schema — run this in Supabase SQL Editor
+└── schema.sql                        # Full DB schema — run this in Supabase SQL Editor
 ```
+
+---
+
+## Features (all implemented)
+
+### Dashboard (`/dashboard`)
+- 4 metric cards: total funded, overall %, category count, underfunded count
+- Underfunded alert banner: categories below 50% sorted by urgency score
+- **Upcoming Due Dates**: categories due in the next 45 days with progress bars and days remaining (urgent ≤7 days highlighted in rose)
+- Header action buttons: **Add Income**, **Log Expense**, **Can I afford this?**
+- Category group cards with colored left border, progress bars, priority badge, due-soon badge (≤14 days)
+
+### Categories (`/categories`)
+- Full CRUD: add, edit, archive (soft-delete: `is_active = false` preserves history)
+- Fields: name, group, target amount, current balance, priority (P1–P5), due date, due frequency, notes
+- Grouped select in dialogs, AlertDialog confirmation for archive
+
+### Add Income (`/income`)
+Three-step flow:
+1. Enter amount and source
+2. **AI allocation review** — Claude Haiku suggests how to split across categories with per-category reasoning and an overall strategy summary. Falls back to `computeAllocations()` if API unavailable. Amounts are editable.
+3. Confirm → writes `income_events` + `allocations` rows, updates all `categories.current_balance`
+
+### Goals (`/goals`)
+- Cards for all "Goals" group categories
+- Violet progress bar, % funded, deficit remaining
+- **Monthly amount needed** = `deficit ÷ months until due date`
+- "Goal reached!" state at 100%
+- Summary row: total saved, active goals, completed count
+
+### Transactions (`/transactions`)
+- Month picker (← →), defaults to current month
+- Summary cards: income received / spent / net
+- Income events listed separately (green)
+- Expenses grouped by date (newest first)
+- **Export CSV** button: downloads `flow-finance-YYYY-MM.csv` with Date, Type, Description, Category, Amount columns
+
+### Settings (`/settings`)
+- **Tax carve-out %**: range slider + number input (5–50%), live example ("on $5,000 income, $X goes to taxes")
+- Currency picker (CAD / USD / EUR / GBP)
+- Persisted to `user_settings` table
+
+### Log Expense (sheet drawer)
+- Triggered from dashboard header
+- Select category (grouped by type, shows available balance)
+- Live balance preview: current → after deduction (red if overdraft)
+- Creates negative `transactions` row, decrements `categories.current_balance`
+
+### Can I Afford This? (sheet drawer)
+- Triggered from dashboard header
+- Enter amount + description, calls `/api/afford`
+- Claude Haiku returns verdict: **yes** (green) / **caution** (amber) / **no** (red)
+- Shows headline, 2–3 sentence reasoning, suggested category and balance remaining after purchase
+
+---
+
+## AI routes
+
+### `POST /api/allocate`
+Fetches user's active categories + settings, calls Claude Haiku with `tool_choice: { type: 'tool', name: 'allocate_income' }` to force structured JSON. Returns `{ suggestions, categories, source, summary }` where `source` is `'ai'` or `'algorithm'`.
+
+### `POST /api/afford`
+Fetches categories, calls Claude Haiku with `tool_choice: { type: 'tool', name: 'afford_check' }`. Returns `{ verdict, headline, reasoning, suggested_category, balance_after }`. Falls back to a simple lifestyle/living balance check if no API key.
+
+Both routes use **forced `tool_use`** to guarantee structured JSON output — no text parsing needed.
 
 ---
 
 ## Design system
 
-**Color palette:** Sage green throughout. Custom `sage` scale registered in Tailwind `@theme`:
+**Color palette:** Sage green throughout. Custom `sage` scale in `globals.css` via `@theme inline`:
 
 | Token | Usage |
 |---|---|
@@ -87,22 +161,24 @@ supabase/
 | `sage-600` | Primary buttons, active nav item |
 | `sage-500` | Sidebar inactive text, icons |
 | `sage-400` | Muted text |
-| `sage-200` | Card borders |
+| `sage-200` | Input borders, form focus ring |
 | `sage-100` | Muted backgrounds |
 | `sage-50` | Page background |
 
-**Category group colors** (defined in `src/lib/group-config.ts`):
+**Category group colors** (`src/lib/group-config.ts`):
 
-| Group | Color |
-|---|---|
-| Taxes | Rose |
-| Bills | Blue |
-| Living | Emerald |
-| Goals | Violet |
-| Investments | Indigo |
-| Lifestyle | Amber |
+| Group | Accent | Usage |
+|---|---|---|
+| Taxes | Rose | P1 — first allocation |
+| Bills | Blue | P1–P2 fixed obligations |
+| Living | Emerald | Day-to-day expenses |
+| Goals | Violet | Savings targets |
+| Investments | Indigo | Long-term wealth |
+| Lifestyle | Amber | Discretionary spending |
 
-**Layout:** Dark sage sidebar (260px, desktop) + content area. Mobile: sidebar collapses to Sheet drawer triggered by hamburger in a dark sage top bar.
+**Layout:** Dark sage sidebar (fixed, desktop) + scrollable content area. Mobile: sidebar collapses to Sheet drawer triggered by hamburger in a fixed dark sage top bar.
+
+**Sheet drawers:** `sm:max-w-lg` (512px), `px-6` horizontal padding, `py-5` header, `py-6` body. The Sheet component in `ui/sheet.tsx` has no hardcoded max-width — consumers control it entirely.
 
 ---
 
@@ -113,10 +189,11 @@ supabase/
 **`categories`** — budget buckets
 - `group_name`: `taxes | bills | living | goals | investments | lifestyle`
 - `target_amount`: how much should be in this bucket
-- `current_balance`: running total (updated when income is allocated or expense logged)
+- `current_balance`: running total (updated on allocation confirm and expense log)
 - `priority`: 1 (critical) → 5 (nice to have)
 - `due_date`: next due date (nullable)
 - `due_frequency`: `monthly | quarterly | annual | one_time | none`
+- `is_active`: false = soft-deleted (hidden from UI, history preserved)
 
 **`income_events`** — each time money comes in
 - `amount`, `source`, `received_at`
@@ -125,18 +202,18 @@ supabase/
 - `suggested_amount`: what the AI proposed
 - `confirmed_amount`: what the user approved
 
-**`transactions`** — individual debits from categories
-- `amount`: positive = funded, negative = spent
+**`transactions`** — individual debits/credits from categories
+- `amount`: positive = funded (from allocation), negative = spent (from expense log)
 - Links to `allocation_id` when created from an income event
 
 **`user_settings`**
-- `tax_carveout_percent`: default 27% (set aside from gross income before other allocations)
+- `tax_carveout_percent`: default 27%
 - `currency`: default CAD
 
 ### Key DB behaviors
-- RLS enabled on all tables — users can only see their own data
-- `seed_default_categories(user_id)` PostgreSQL function seeds 24 categories on signup
-- `handle_new_user()` trigger auto-creates `user_settings` row on auth signup
+- RLS enabled on all tables — users only see their own rows
+- `seed_default_categories(user_id)` seeds 24 categories on signup
+- `handle_new_user()` trigger auto-creates `user_settings` on auth signup
 - `updated_at` auto-maintained via trigger on `categories` and `user_settings`
 
 ---
@@ -153,24 +230,22 @@ score = priorityWeight × (1 - fundedRatio) × (1 / max(1, daysUntilDue/30)) × 
 ```
 
 ### `computeAllocations(income, categories, taxCarveoutPercent)`
-Three-step waterfall:
-1. **Tax carve-out** — reserve `taxCarveoutPercent`% of gross income for tax categories first
+Three-step waterfall (fallback when AI is unavailable):
+1. **Tax carve-out** — reserve `taxCarveoutPercent`% for tax group categories
 2. **Urgency-weighted distribution** — remaining income split proportionally by urgency score
-3. **Surplus routing** — any leftover goes to Emergency Fund (or first goal if no emergency fund)
-
-This function is used as the **fallback** when the AI API is unavailable. The AI (Claude Haiku) is given the same data and asked to return a JSON array with the same shape, with more nuanced reasoning.
+3. **Surplus routing** — leftover goes to Emergency Fund (or first goal)
 
 ---
 
 ## Authentication flow
 
-1. User signs up → Supabase sends confirmation email
+1. User signs up → Supabase sends confirmation email → `seed_default_categories` RPC called
 2. User clicks link → `/auth/callback` exchanges code for session
 3. `src/proxy.ts` runs on every request:
-   - Unauthenticated + non-auth route → redirect to `/login`
+   - Unauthenticated + protected route → redirect to `/login`
    - Authenticated + auth route → redirect to `/dashboard`
-4. Server components use `createClient()` from `src/lib/supabase/server.ts`
-5. Client components use `createClient()` from `src/lib/supabase/client.ts`
+4. Server components: `createClient()` from `src/lib/supabase/server.ts`
+5. Client components: `createClient()` from `src/lib/supabase/client.ts`
 
 ---
 
@@ -179,48 +254,19 @@ This function is used as the **fallback** when the AI API is unavailable. The AI
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://utoqkqgzbqfdcjppvfnl.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
-ANTHROPIC_API_KEY=sk-ant-...       # Claude Haiku 4.5 — add for Week 3
+ANTHROPIC_API_KEY=sk-ant-...       # Required for AI allocation and afford check
 ```
 
 Set in Vercel: Project → Settings → Environment Variables.
 
 ---
 
-## Build plan
+## Known ESLint rules to watch
 
-### ✅ Week 1 — Foundation (complete)
-- [x] Next.js 16 + Tailwind v4 + shadcn/ui scaffold
-- [x] Supabase project, schema, RLS, seed function
-- [x] Email auth (login/signup) with split-screen design
-- [x] App shell: dark sage sidebar + mobile drawer
-- [x] Dashboard: metric cards, category group cards, underfunded alerts
-- [x] Sage green design system with custom color scale
-- [x] Deployed to Vercel, connected to GitHub (auto-deploy on push)
-
-### 🔲 Week 2 — Core data flow
-- [ ] Category CRUD screen (add/edit/delete/reorder)
-- [ ] Income entry form
-- [ ] Allocation review screen (editable per-category amounts)
-- [ ] Confirm allocation → update `allocations` table → update `categories.current_balance`
-- [ ] Log expense → deduct from category balance
-
-### 🔲 Week 3 — AI layer
-- [ ] `/api/allocate` route calling Claude Haiku 4.5
-- [ ] Allocation prompt with full category context as JSON
-- [ ] Parse Claude's JSON response → populate allocation review screen
-- [ ] Show Claude's reasoning per category as tooltip/explanation
-- [ ] Fallback to `computeAllocations()` if API fails
-
-### 🔲 Week 4 — Tracking & polish
-- [ ] Transaction log: log a spend → deduct from category balance
-- [ ] Goals screen with progress bars
-- [ ] Dashboard underfunded alerts (red if < 50% funded and due within 14 days)
-- [ ] Tax carve-out setting in user settings
-
-### 🔲 Week 5 — V2 features
-- [ ] "Can I afford this?" — enter purchase amount, Claude checks balances and advises
-- [ ] Due date calendar view
-- [ ] Export to CSV
+- `react-hooks/set-state-in-effect` — fires when an async data-fetch function called inside `useEffect` internally calls `setState`. Fix: define the async function **inside** the `useEffect` body, or add `// eslint-disable-next-line react-hooks/set-state-in-effect`.
+- `react-hooks/purity` — fires on `Date.now()` / `Math.random()` in server component render scope. Suppress with `// eslint-disable-next-line react-hooks/purity` (rule doesn't distinguish server vs client components).
+- `react/no-unescaped-entities` — quotes in JSX text must be escaped: `&quot;` for `"`, `&apos;` for `'`.
+- `react-hooks/immutability` — function referenced in `useEffect` before it is declared. Fix: wrap with `useCallback` above the effect.
 
 ---
 
@@ -228,8 +274,8 @@ Set in Vercel: Project → Settings → Environment Variables.
 
 ```bash
 npm run dev      # Start dev server at localhost:3000
-npm run build    # Production build (also runs type check)
-npm run lint     # ESLint
+npm run build    # Production build (type check + lint + compile)
+npm run lint     # ESLint only
 npx tsc --noEmit # Type check only
 ```
 
