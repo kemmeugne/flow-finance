@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/finance'
 import { Receipt, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -34,39 +34,40 @@ export default function TransactionsPage() {
   const [income, setIncome] = useState<IncomeRow[]>([])
   const [loading, setLoading] = useState(true)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
-    const lastDay = new Date(year, month + 1, 0).getDate()
-    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+      const lastDay = new Date(year, month + 1, 0).getDate()
+      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-    const [txResult, incomeResult] = await Promise.all([
-      supabase
-        .from('transactions')
-        .select('id, amount, description, date, categories(name, group_name)')
-        .eq('user_id', user.id)
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date', { ascending: false }),
-      supabase
-        .from('income_events')
-        .select('id, amount, source, received_at')
-        .eq('user_id', user.id)
-        .gte('received_at', startDate)
-        .lte('received_at', endDate + 'T23:59:59')
-        .order('received_at', { ascending: false }),
-    ])
+      const [txResult, incomeResult] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('id, amount, description, date, categories(name, group_name)')
+          .eq('user_id', user.id)
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date', { ascending: false }),
+        supabase
+          .from('income_events')
+          .select('id, amount, source, received_at')
+          .eq('user_id', user.id)
+          .gte('received_at', startDate)
+          .lte('received_at', endDate + 'T23:59:59')
+          .order('received_at', { ascending: false }),
+      ])
 
-    setTransactions((txResult.data ?? []) as unknown as TxRow[])
-    setIncome((incomeResult.data ?? []) as unknown as IncomeRow[])
-    setLoading(false)
+      setTransactions((txResult.data ?? []) as unknown as TxRow[])
+      setIncome((incomeResult.data ?? []) as unknown as IncomeRow[])
+      setLoading(false)
+    }
+    fetchData()
   }, [year, month])
-
-  useEffect(() => { loadData() }, [loadData])
 
   function prevMonth() {
     if (month === 0) { setMonth(11); setYear(y => y - 1) }

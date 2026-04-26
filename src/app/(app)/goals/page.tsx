@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatCurrency } from '@/lib/finance'
-import { Target, Link as LinkIcon } from 'lucide-react'
+import { Target } from 'lucide-react'
 import Link from 'next/link'
 import type { Category } from '@/lib/supabase/types'
 

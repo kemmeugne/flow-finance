@@ -69,6 +69,7 @@ export default function CategoriesPage() {
     setLoading(false)
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   function openAdd() {
@@ -417,7 +418,7 @@ export default function CategoriesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
-              Archive "{deleteTarget?.name}"?
+              Archive &quot;{deleteTarget?.name}&quot;?
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will hide the category from your dashboard and allocation screen. Your balance history is preserved.

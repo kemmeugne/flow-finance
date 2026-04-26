@@ -7,6 +7,8 @@ import {
   Tags,
   PlusCircle,
   Target,
+  Receipt,
+  Settings,
   LogOut,
   Leaf,
 } from 'lucide-react'
@@ -14,10 +16,11 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
-  { href: '/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
-  { href: '/categories', label: 'Categories',  icon: Tags },
-  { href: '/income',     label: 'Add Income',  icon: PlusCircle },
-  { href: '/goals',      label: 'Goals',       icon: Target },
+  { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/categories',   label: 'Categories',   icon: Tags },
+  { href: '/income',       label: 'Add Income',   icon: PlusCircle },
+  { href: '/goals',        label: 'Goals',        icon: Target },
+  { href: '/transactions', label: 'Transactions', icon: Receipt },
 ]
 
 export function SidebarContent() {
@@ -67,8 +70,20 @@ export function SidebarContent() {
         })}
       </nav>
 
-      {/* Bottom: sign out */}
-      <div className="px-3 py-4 border-t border-sage-800">
+      {/* Bottom: settings + sign out */}
+      <div className="px-3 py-4 border-t border-sage-800 space-y-0.5">
+        <Link
+          href="/settings"
+          className={cn(
+            'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+            pathname === '/settings'
+              ? 'bg-sage-600 text-white shadow-sm'
+              : 'text-sage-400 hover:bg-sage-800 hover:text-sage-100'
+          )}
+        >
+          <Settings className="w-4 h-4 shrink-0" />
+          Settings
+        </Link>
         <button
           onClick={handleSignOut}
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-sage-500 hover:bg-sage-800 hover:text-sage-200 transition-all duration-150"
