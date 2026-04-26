@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { AlertTriangle, PlusCircle, TrendingUp } from 'lucide-react'
+import { AlertTriangle, PlusCircle, TrendingUp, CalendarClock } from 'lucide-react'
 import { formatCurrency, urgencyScore } from '@/lib/finance'
 import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
 import { LogExpenseButton } from '@/components/layout/log-expense-button'
+import { AffordButton } from '@/components/layout/afford-button'
 import type { Category, CategoryGroup } from '@/lib/supabase/types'
 
 function fundedPct(cat: Category) {
@@ -35,6 +36,16 @@ export default async function DashboardPage() {
   const overallPct      = totalTarget > 0 ? Math.round((totalBalance / totalTarget) * 100) : 0
   const underfunded     = cats.filter(c => c.target_amount > 0 && c.current_balance < c.target_amount * 0.5)
 
+  // eslint-disable-next-line react-hooks/purity
+  const today = Date.now()
+  const upcoming = cats
+    .filter(c => {
+      if (!c.due_date) return false
+      const days = Math.ceil((new Date(c.due_date).getTime() - today) / 86400000)
+      return days >= 0 && days <= 45
+    })
+    .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime())
+
   const byGroup = GROUP_ORDER.reduce<Record<string, Category[]>>((acc, g) => {
     acc[g] = cats.filter(c => c.group_name === g)
     return acc
@@ -51,7 +62,8 @@ export default async function DashboardPage() {
             Your financial buckets at a glance
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <AffordButton />
           <LogExpenseButton />
           <Link
             href="/income"
@@ -105,6 +117,56 @@ export default async function DashboardPage() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Upcoming due dates */}
+      {upcoming.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarClock className="w-4 h-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Due in the next 45 days</h2>
+          </div>
+          <div className="space-y-2">
+            {upcoming.map(cat => {
+              const days = Math.ceil((new Date(cat.due_date!).getTime() - today) / 86400000)
+              const pct = cat.target_amount > 0
+                ? Math.min(100, Math.round((cat.current_balance / cat.target_amount) * 100))
+                : 100
+              const deficit = Math.max(0, cat.target_amount - cat.current_balance)
+              const cfg = GROUP_CONFIG[cat.group_name as CategoryGroup]
+              const urgent = days <= 7
+
+              return (
+                <div
+                  key={cat.id}
+                  className={`flex items-center gap-4 p-3.5 rounded-xl border bg-card ${urgent ? 'border-rose-200' : 'border-border'}`}
+                >
+                  <div className={`shrink-0 px-2 py-1 rounded-md text-center min-w-[48px] ${urgent ? 'bg-rose-100' : 'bg-muted'}`}>
+                    <p className={`text-xs font-bold leading-none ${urgent ? 'text-rose-700' : 'text-foreground'}`}>{days}d</p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground truncate">{cat.name}</span>
+                      <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded-full ${cfg.badge}`}>{cfg.label}</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${pct}%`, backgroundColor: pct >= 75 ? '#10B981' : pct >= 40 ? '#F59E0B' : '#F43F5E' }}
+                      />
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold text-foreground">{pct}%</p>
+                    {deficit > 0 && (
+                      <p className="text-xs text-muted-foreground">{formatCurrency(deficit)} short</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
       )}
 
       {/* If no categories yet */}

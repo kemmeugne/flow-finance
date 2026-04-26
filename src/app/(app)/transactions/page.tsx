@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/finance'
-import { Receipt, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Receipt, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 
 type TxRow = {
   id: string
@@ -86,6 +86,25 @@ export default function TransactionsPage() {
   const totalIncome = income.reduce((s, i) => s + i.amount, 0)
   const net = totalIncome - totalExpenses
 
+  function exportCSV() {
+    const rows: string[] = [
+      'Date,Type,Description,Category,Amount (CAD)',
+      ...income.map(ev =>
+        `${ev.received_at.split('T')[0]},Income,"${ev.source.replace(/"/g, '""')}",,${ev.amount.toFixed(2)}`
+      ),
+      ...transactions.map(tx =>
+        `${tx.date},Expense,"${tx.description.replace(/"/g, '""')}","${(tx.categories?.name ?? '').replace(/"/g, '""')}",${tx.amount.toFixed(2)}`
+      ),
+    ]
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `flow-finance-${year}-${String(month + 1).padStart(2, '0')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Group expenses by date
   const byDate: Record<string, TxRow[]> = {}
   for (const tx of transactions) {
@@ -98,9 +117,20 @@ export default function TransactionsPage() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Transactions</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Your income and spending history</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Transactions</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Your income and spending history</p>
+        </div>
+        {(transactions.length > 0 || income.length > 0) && !loading && (
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:bg-muted transition-colors shrink-0"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+        )}
       </div>
 
       {/* Month picker */}
