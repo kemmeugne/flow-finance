@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { AlertTriangle, PlusCircle, TrendingUp } from 'lucide-react'
 import { formatCurrency, urgencyScore } from '@/lib/finance'
 import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
+import { LogExpenseButton } from '@/components/layout/log-expense-button'
 import type { Category, CategoryGroup } from '@/lib/supabase/types'
 
 function fundedPct(cat: Category) {
@@ -50,13 +51,16 @@ export default async function DashboardPage() {
             Your financial buckets at a glance
           </p>
         </div>
-        <Link
-          href="/income"
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
-        >
-          <PlusCircle className="w-4 h-4" />
-          Add Income
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <LogExpenseButton />
+          <Link
+            href="/income"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <PlusCircle className="w-4 h-4" />
+            Add Income
+          </Link>
+        </div>
       </div>
 
       {/* Summary metrics */}
