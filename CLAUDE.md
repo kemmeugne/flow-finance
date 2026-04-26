@@ -54,12 +54,13 @@ src/
 │   ├── api/
 │   │   ├── allocate/route.ts         # POST: Claude Haiku allocates income across categories
 │   │   └── afford/route.ts           # POST: Claude Haiku checks if a purchase is affordable
-│   ├── auth/callback/route.ts        # Supabase OAuth callback
+│   ├── auth/callback/route.ts        # Confirms email, signs out, redirects to ?next= param
 │   ├── login/page.tsx                # Split-screen login
 │   ├── signup/page.tsx               # Split-screen signup + seed_default_categories RPC
 │   ├── globals.css                   # Tailwind theme + sage color scale (@theme inline)
 │   ├── layout.tsx                    # Root layout (Geist font)
-│   └── page.tsx                      # Redirects → /dashboard
+│   ├── welcome/page.tsx              # Post-confirmation page (unauthenticated, prompts sign in)
+   └── page.tsx                      # Redirects → /dashboard
 ├── components/
 │   ├── layout/
 │   │   ├── app-sidebar.tsx           # Dark sage sidebar (Dashboard, Categories, Add Income, Goals, Transactions)
@@ -80,7 +81,8 @@ src/
 └── proxy.ts                          # Auth guard (Next.js 16 middleware replacement)
 
 supabase/
-└── schema.sql                        # Full DB schema — run this in Supabase SQL Editor
+├── schema.sql                        # Full DB schema — run this in Supabase SQL Editor
+└── email-confirm-signup.html         # Branded confirmation email template (paste into Supabase)
 ```
 
 ---
@@ -239,13 +241,41 @@ Three-step waterfall (fallback when AI is unavailable):
 
 ## Authentication flow
 
-1. User signs up → Supabase sends confirmation email → `seed_default_categories` RPC called
-2. User clicks link → `/auth/callback` exchanges code for session
-3. `src/proxy.ts` runs on every request:
-   - Unauthenticated + protected route → redirect to `/login`
-   - Authenticated + auth route → redirect to `/dashboard`
-4. Server components: `createClient()` from `src/lib/supabase/server.ts`
-5. Client components: `createClient()` from `src/lib/supabase/client.ts`
+1. User signs up → `seed_default_categories` RPC called → Supabase sends branded confirmation email
+2. User clicks confirmation link → `/auth/callback`:
+   - Exchanges code for session (confirms email in Supabase)
+   - **Immediately signs out** (security: user must log in explicitly)
+   - Redirects to `/welcome` (reads `?next=` param, default `/dashboard`)
+3. `/welcome` page — unauthenticated, shows "Email confirmed!" + "Sign in to your account" → `/login`
+4. User logs in → dashboard
+5. `src/proxy.ts` runs on every request:
+   - Unauthenticated + non-public route → redirect to `/login`
+   - Authenticated + `/login` or `/signup` → redirect to `/dashboard`
+   - `/welcome` and `/auth/*` are public (accessible unauthenticated, no redirect for authenticated)
+6. Server components: `createClient()` from `src/lib/supabase/server.ts`
+7. Client components: `createClient()` from `src/lib/supabase/client.ts`
+
+---
+
+## Supabase configuration (dashboard settings)
+
+These must be set in the Supabase dashboard — they are not in code.
+
+**Authentication → URL Configuration**
+- Site URL: `https://flow-finance-ebon.vercel.app`
+- Redirect URLs: `https://flow-finance-ebon.vercel.app/**` and `http://localhost:3000/**`
+
+Without the redirect URL allowlist entries, Supabase ignores the `emailRedirectTo` option set in the signup call and falls back to the Site URL, breaking the `/welcome` redirect.
+
+**Authentication → Email Templates → Confirm signup**
+- Subject: `Confirm your Flow Finance account`
+- Body: paste contents of `supabase/email-confirm-signup.html`
+- Requires a custom SMTP provider (e.g. Resend) — Supabase's built-in mailer blocks custom HTML templates
+
+**Authentication → SMTP Settings (if using Resend)**
+- Host: `smtp.resend.com` · Port: `465` · Username: `resend`
+- Password: Resend API key (`re_...`)
+- Sender name: `Flow Finance` · Sender email: `onboarding@resend.dev` (or your domain)
 
 ---
 

@@ -31,9 +31,13 @@ Each category belongs to one of six **groups**, which determine its color and ge
 
 ### 1. Create an account
 
-Go to the app and click **Sign up**. Enter your email and a password. You will receive a confirmation email — click the link to activate your account.
+Go to the app and click **Sign up**. Enter your email and a password. You will see a "check your email" screen.
 
-When you first sign in, **24 default categories are automatically created** for you, covering the most common budget buckets for a Canadian freelancer. You can rename, edit, or remove any of them.
+Open the confirmation email from Flow Finance and click **Confirm my account**. You will land on a confirmation page that tells you your email has been verified.
+
+For security, you are **not** logged in automatically at this point. Click **Sign in to your account**, enter your password, and you will be taken to your dashboard.
+
+**24 default categories are automatically created** for you when you sign up, covering the most common budget buckets for a Canadian freelancer. You can rename, edit, or remove any of them.
 
 ### 2. Review your categories
 
