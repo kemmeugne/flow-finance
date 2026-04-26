@@ -91,22 +91,22 @@ export function LogExpenseButton() {
       </button>
 
       <Sheet open={open} onOpenChange={v => { setOpen(v); if (!v) resetForm() }}>
-        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
-          <SheetHeader className="border-b border-border pb-4">
-            <SheetTitle>Log an Expense</SheetTitle>
+        <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col overflow-y-auto">
+          <SheetHeader className="border-b border-border px-6 py-5">
+            <SheetTitle className="text-lg">Log an Expense</SheetTitle>
           </SheetHeader>
 
           {done ? (
-            <div className="flex flex-col items-center justify-center flex-1 gap-3">
+            <div className="flex flex-col items-center justify-center flex-1 gap-3 px-6">
               <CheckCircle className="w-12 h-12 text-sage-500" />
               <p className="text-sm font-medium text-foreground">Expense logged!</p>
               <p className="text-xs text-muted-foreground">Balance updated.</p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col flex-1 pt-6 space-y-5">
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 px-6 py-6 space-y-5">
 
               {/* Category */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">Category *</label>
                 <select
                   value={form.category_id}
@@ -130,10 +130,9 @@ export function LogExpenseButton() {
                   })}
                 </select>
 
-                {/* Balance preview */}
                 {selectedCat && (
                   <p className="text-xs text-muted-foreground">
-                    Current balance:{' '}
+                    Balance:{' '}
                     <span className="font-medium text-foreground">
                       {formatCurrency(selectedCat.current_balance)}
                     </span>
@@ -147,7 +146,7 @@ export function LogExpenseButton() {
               </div>
 
               {/* Amount */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">Amount (CAD) *</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
@@ -165,7 +164,7 @@ export function LogExpenseButton() {
               </div>
 
               {/* Description */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">Description *</label>
                 <input
                   type="text"
@@ -178,7 +177,7 @@ export function LogExpenseButton() {
               </div>
 
               {/* Date */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">Date *</label>
                 <input
                   type="date"
@@ -194,7 +193,7 @@ export function LogExpenseButton() {
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-destructive text-white rounded-lg text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-destructive text-white rounded-lg text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-60"
               >
                 <MinusCircle className="w-4 h-4" />
                 {saving ? 'Saving…' : 'Log expense'}

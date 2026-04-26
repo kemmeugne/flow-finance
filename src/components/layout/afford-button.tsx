@@ -73,16 +73,16 @@ export function AffordButton() {
       </button>
 
       <Sheet open={open} onOpenChange={v => { setOpen(v); if (!v) reset() }}>
-        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
-          <SheetHeader className="border-b border-border pb-4">
-            <SheetTitle>Can I afford this?</SheetTitle>
+        <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col overflow-y-auto">
+          <SheetHeader className="border-b border-border px-6 py-5">
+            <SheetTitle className="text-lg">Can I afford this?</SheetTitle>
           </SheetHeader>
 
-          <div className="flex flex-col flex-1 pt-6 space-y-5">
+          <div className="flex flex-col flex-1 px-6 py-6 space-y-5">
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">Amount (CAD) *</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
@@ -99,7 +99,7 @@ export function AffordButton() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">What is it for? *</label>
                 <input
                   type="text"
@@ -114,7 +114,7 @@ export function AffordButton() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
               >
                 {loading
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> Checking with AI…</>
