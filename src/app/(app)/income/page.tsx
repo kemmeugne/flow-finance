@@ -34,6 +34,7 @@ interface AllocationRow {
 
 export default function IncomePage() {
   const [step, setStep] = useState<Step>('form')
+  const [taxable, setTaxable] = useState(true)
   const [form, setForm] = useState<IncomeForm>({
     amount: '',
     gst: '',
@@ -79,7 +80,7 @@ export default function IncomePage() {
     const res = await fetch('/api/allocate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ income: netIncome }),
+      body: JSON.stringify({ income: netIncome, taxable }),
     })
 
     if (!res.ok) {
@@ -240,6 +241,30 @@ export default function IncomePage() {
               </div>
             </div>
 
+            {/* Taxable toggle */}
+            <div className="flex items-center justify-between py-0.5">
+              <div>
+                <p className="text-sm font-medium text-foreground">Taxable income</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {taxable ? 'Tax carve-out will apply' : 'Tax carve-out will be skipped'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTaxable(v => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-sage-500 focus:ring-offset-2 ${
+                  taxable ? 'bg-sage-600' : 'bg-muted border border-border'
+                }`}
+                aria-pressed={taxable}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    taxable ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
             {/* GST / QST */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -398,6 +423,11 @@ export default function IncomePage() {
               ) : formatCurrency(income)}{' '}
               from <strong className="text-foreground">{form.source}</strong>
               {' · '}{new Date(form.received_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {!taxable && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                  Non-taxable
+                </span>
+              )}
             </p>
           </div>
           <button
@@ -573,6 +603,7 @@ export default function IncomePage() {
           onClick={() => {
             setStep('form')
             setForm({ amount: '', gst: '', qst: '', account_id: '', source: '', received_at: new Date().toISOString().split('T')[0], notes: '' })
+            setTaxable(true)
             setRows([])
           }}
           className="px-5 py-2.5 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors"

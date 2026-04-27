@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { income } = await request.json() as { income: number }
+  const { income, taxable = true } = await request.json() as { income: number; taxable?: boolean }
 
   const [{ data: categories }, { data: settings }] = await Promise.all([
     supabase.from('categories').select('*').eq('user_id', user.id).eq('is_active', true).order('sort_order'),
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const taxCarveout = (settings as any)?.tax_carveout_percent ?? 27
+  const taxCarveout = taxable ? ((settings as any)?.tax_carveout_percent ?? 27) : 0
   const cats = (categories ?? []) as Category[]
 
   // ── Try Claude Haiku ──────────────────────────────────────────────
