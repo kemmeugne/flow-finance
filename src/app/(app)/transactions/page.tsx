@@ -10,7 +10,9 @@ type TxRow = {
   amount: number
   description: string
   date: string
+  account_id: string | null
   categories: { name: string; group_name: string } | null
+  accounts: { name: string } | null
 }
 
 type IncomeRow = {
@@ -18,7 +20,11 @@ type IncomeRow = {
   amount: number
   source: string
   received_at: string
+  account_id: string | null
+  accounts: { name: string } | null
 }
+
+type AccountOption = { id: string; name: string }
 
 function formatDate(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-CA', {
@@ -33,6 +39,22 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<TxRow[]>([])
   const [income, setIncome] = useState<IncomeRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [accountFilter, setAccountFilter] = useState<string>('')
+  const [accountOptions, setAccountOptions] = useState<AccountOption[]>([])
+
+  // Load accounts once for the filter dropdown
+  useEffect(() => {
+    async function loadAccounts() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('accounts').select('id, name')
+        .eq('user_id', user.id).eq('is_active', true).order('sort_order')
+      setAccountOptions((data ?? []) as AccountOption[])
+    }
+    loadAccounts()
+  }, [])
 
   useEffect(() => {
     async function fetchData() {
@@ -48,14 +70,14 @@ export default function TransactionsPage() {
       const [txResult, incomeResult] = await Promise.all([
         supabase
           .from('transactions')
-          .select('id, amount, description, date, categories(name, group_name)')
+          .select('id, amount, description, date, account_id, categories(name, group_name), accounts(name)')
           .eq('user_id', user.id)
           .gte('date', startDate)
           .lte('date', endDate)
           .order('date', { ascending: false }),
         supabase
           .from('income_events')
-          .select('id, amount, source, received_at')
+          .select('id, amount, source, received_at, account_id, accounts(name)')
           .eq('user_id', user.id)
           .gte('received_at', startDate)
           .lte('received_at', endDate + 'T23:59:59')
@@ -82,18 +104,29 @@ export default function TransactionsPage() {
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
   const monthLabel = new Date(year, month).toLocaleDateString('en-CA', { month: 'long', year: 'numeric' })
 
-  const totalExpenses = transactions.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0)
-  const totalIncome = income.reduce((s, i) => s + i.amount, 0)
+  // Apply account filter
+  const filteredTransactions = accountFilter
+    ? transactions.filter(t => t.account_id === accountFilter)
+    : transactions
+  const filteredIncome = accountFilter
+    ? income.filter(ev => ev.account_id === accountFilter)
+    : income
+
+  const totalExpenses = filteredTransactions.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0)
+  const totalIncome = filteredIncome.reduce((s, i) => s + i.amount, 0)
   const net = totalIncome - totalExpenses
 
   function exportCSV() {
     const rows: string[] = [
-      'Date,Type,Description,Category,Amount (CAD)',
-      ...income.map(ev =>
-        `${ev.received_at.split('T')[0]},Income,"${ev.source.replace(/"/g, '""')}",,${ev.amount.toFixed(2)}`
+      'Date,Type,Description,Category,Account,Amount (CAD)',
+      ...filteredIncome.map(ev =>
+        `${ev.received_at.split('T')[0]},Income,"${ev.source.replace(/"/g, '""')}",,` +
+        `"${(ev.accounts?.name ?? '').replace(/"/g, '""')}",${ev.amount.toFixed(2)}`
       ),
-      ...transactions.map(tx =>
-        `${tx.date},Expense,"${tx.description.replace(/"/g, '""')}","${(tx.categories?.name ?? '').replace(/"/g, '""')}",${tx.amount.toFixed(2)}`
+      ...filteredTransactions.map(tx =>
+        `${tx.date},Expense,"${tx.description.replace(/"/g, '""')}",` +
+        `"${(tx.categories?.name ?? '').replace(/"/g, '""')}",` +
+        `"${(tx.accounts?.name ?? '').replace(/"/g, '""')}",${tx.amount.toFixed(2)}`
       ),
     ]
     const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' })
@@ -107,7 +140,7 @@ export default function TransactionsPage() {
 
   // Group expenses by date
   const byDate: Record<string, TxRow[]> = {}
-  for (const tx of transactions) {
+  for (const tx of filteredTransactions) {
     if (!byDate[tx.date]) byDate[tx.date] = []
     byDate[tx.date].push(tx)
   }
@@ -122,7 +155,7 @@ export default function TransactionsPage() {
           <h1 className="text-2xl font-bold text-foreground">Transactions</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Your income and spending history</p>
         </div>
-        {(transactions.length > 0 || income.length > 0) && !loading && (
+        {(filteredTransactions.length > 0 || filteredIncome.length > 0) && !loading && (
           <button
             onClick={exportCSV}
             className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-foreground hover:bg-muted transition-colors shrink-0"
@@ -133,26 +166,41 @@ export default function TransactionsPage() {
         )}
       </div>
 
-      {/* Month picker */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={prevMonth}
-          className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-          aria-label="Previous month"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <span className="text-sm font-semibold text-foreground min-w-[150px] text-center">
-          {monthLabel}
-        </span>
-        <button
-          onClick={nextMonth}
-          disabled={isCurrentMonth}
-          className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Next month"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
+      {/* Month picker + account filter */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={prevMonth}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-semibold text-foreground min-w-[150px] text-center">
+            {monthLabel}
+          </span>
+          <button
+            onClick={nextMonth}
+            disabled={isCurrentMonth}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Next month"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {accountOptions.length > 0 && (
+          <select
+            value={accountFilter}
+            onChange={e => setAccountFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-sage-500"
+          >
+            <option value="">All accounts</option>
+            {accountOptions.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Summary cards */}
@@ -182,23 +230,23 @@ export default function TransactionsPage() {
       {/* Content */}
       {loading ? (
         <div className="text-center py-16 text-muted-foreground text-sm">Loading…</div>
-      ) : transactions.length === 0 && income.length === 0 ? (
+      ) : filteredTransactions.length === 0 && filteredIncome.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Receipt className="w-12 h-12 text-muted-foreground/40 mb-4" />
           <h2 className="text-lg font-semibold text-foreground">No activity this month</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            Add income or log expenses to see them here.
+            {accountFilter ? 'No transactions for this account.' : 'Add income or log expenses to see them here.'}
           </p>
         </div>
       ) : (
         <div className="space-y-6">
 
           {/* Income events */}
-          {income.length > 0 && (
+          {filteredIncome.length > 0 && (
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Income received</p>
               <div className="space-y-1.5">
-                {income.map(ev => (
+                {filteredIncome.map(ev => (
                   <div
                     key={ev.id}
                     className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between gap-3"
@@ -209,7 +257,14 @@ export default function TransactionsPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{ev.source}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(ev.received_at.split('T')[0])}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs text-muted-foreground">{formatDate(ev.received_at.split('T')[0])}</p>
+                          {ev.accounts?.name && (
+                            <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                              {ev.accounts.name}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <span className="text-sm font-semibold text-emerald-600 shrink-0">
@@ -235,7 +290,14 @@ export default function TransactionsPage() {
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{tx.description}</p>
-                      <p className="text-xs text-muted-foreground">{tx.categories?.name ?? '—'}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs text-muted-foreground">{tx.categories?.name ?? '—'}</p>
+                        {tx.accounts?.name && (
+                          <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                            {tx.accounts.name}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <span
                       className={`text-sm font-semibold shrink-0 ${

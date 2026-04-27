@@ -12,6 +12,7 @@ import {
   LogOut,
   Leaf,
   Wallet,
+  BarChart2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -23,6 +24,7 @@ const navItems = [
   { href: '/income',       label: 'Add Income',   icon: PlusCircle },
   { href: '/goals',        label: 'Goals',        icon: Target },
   { href: '/transactions', label: 'Transactions', icon: Receipt },
+  { href: '/analytics',   label: 'Analytics',    icon: BarChart2 },
 ]
 
 export function SidebarContent() {

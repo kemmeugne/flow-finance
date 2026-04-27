@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Pencil, Trash2, AlertTriangle, Wallet } from 'lucide-react'
+import { Plus, Pencil, Trash2, AlertTriangle, Wallet, SlidersHorizontal } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { createClient } from '@/lib/supabase/client'
@@ -40,6 +40,9 @@ export default function AccountsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Account | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<Account | null>(null)
+  const [reconcileTarget, setReconcileTarget] = useState<Account | null>(null)
+  const [reconcileActual, setReconcileActual] = useState<string>('')
+  const [reconciling, setReconciling] = useState(false)
   const [form, setForm] = useState<AccountForm>(EMPTY_FORM)
 
   const load = useCallback(async () => {
@@ -153,6 +156,21 @@ export default function AccountsPage() {
 
     setSaving(false)
     setDialogOpen(false)
+    load()
+  }
+
+  async function handleReconcile(e: React.FormEvent) {
+    e.preventDefault()
+    if (!reconcileTarget) return
+    setReconciling(true)
+    const actual = parseFloat(reconcileActual)
+    if (!isNaN(actual)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (createClient() as any).from('accounts').update({ balance: actual }).eq('id', reconcileTarget.id)
+    }
+    setReconciling(false)
+    setReconcileTarget(null)
+    setReconcileActual('')
     load()
   }
 
@@ -338,6 +356,13 @@ export default function AccountsPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 md:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={() => { setReconcileTarget(account); setReconcileActual(String(account.balance)) }}
+                        title="Adjust balance"
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => openEdit(account)}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -591,6 +616,64 @@ export default function AccountsPage() {
                 className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
               >
                 {saving ? 'Saving…' : editTarget ? 'Save changes' : 'Add account'}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reconcile / Adjust Balance Dialog */}
+      <Dialog open={!!reconcileTarget} onOpenChange={v => { if (!v) { setReconcileTarget(null); setReconcileActual('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Adjust Balance — {reconcileTarget?.name}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleReconcile} className="space-y-4 py-2">
+            <div className="rounded-lg bg-muted border border-border px-4 py-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Current balance</span>
+                <span className="font-medium text-foreground">{reconcileTarget ? formatCurrency(reconcileTarget.balance) : '—'}</span>
+              </div>
+              {reconcileActual !== '' && !isNaN(parseFloat(reconcileActual)) && reconcileTarget && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Difference</span>
+                  <span className={`font-medium ${parseFloat(reconcileActual) - reconcileTarget.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {parseFloat(reconcileActual) - reconcileTarget.balance >= 0 ? '+' : ''}
+                    {formatCurrency(parseFloat(reconcileActual) - reconcileTarget.balance)}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Actual balance</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={reconcileActual}
+                  onChange={e => setReconcileActual(e.target.value)}
+                  required
+                  autoFocus
+                  className="w-full pl-7 pr-3 py-2 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => { setReconcileTarget(null); setReconcileActual('') }}
+                className="px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={reconciling}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
+              >
+                {reconciling ? 'Saving…' : 'Update balance'}
               </button>
             </DialogFooter>
           </form>
