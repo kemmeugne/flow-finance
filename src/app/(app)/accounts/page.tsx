@@ -358,7 +358,7 @@ export default function AccountsPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 md:opacity-100 transition-opacity shrink-0">
-                      {isCashAccount(account.type) && (
+                      {(isCashAccount(account.type) || isRegisteredAccount(account.type)) && (
                         <button
                           onClick={() => setAssignTarget(account)}
                           title="Assign to categories"

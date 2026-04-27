@@ -141,18 +141,16 @@ export default function IncomePage() {
     setCategoryMap(map)
 
     setRows(
-      cats
-        .filter(c => c.target_amount > 0)
-        .map(cat => ({
-          category_id: cat.id,
-          name: cat.name,
-          group_name: cat.group_name as CategoryGroup,
-          suggested: 0,
-          confirmed: 0,
-          reasoning: '',
-          current_balance: cat.current_balance,
-          target_amount: cat.target_amount,
-        }))
+      cats.map(cat => ({
+        category_id: cat.id,
+        name: cat.name,
+        group_name: cat.group_name as CategoryGroup,
+        suggested: 0,
+        confirmed: 0,
+        reasoning: '',
+        current_balance: cat.current_balance,
+        target_amount: cat.target_amount,
+      }))
     )
     setAllocationSource('manual')
     setAiSummary(null)
