@@ -55,17 +55,11 @@ export function LogExpenseButton() {
     setForm({ category_id: '', amount: '', description: '', date: new Date().toISOString().split('T')[0], from_account_id: '' })
   }
 
-  // When category changes: auto-select from_account if it's a payment category
+  // When category changes: default to first checking account for all expenses
   function handleCategoryChange(category_id: string) {
-    const linkedAccount = paymentCategoryMap.get(category_id)
-    let fromAccountId = ''
-    if (linkedAccount) {
-      // Default to first checking account, then first any cash account
-      const cashAccounts = accounts.filter(a => ['checking', 'savings', 'cash'].includes(a.type))
-      const firstChecking = cashAccounts.find(a => a.type === 'checking') ?? cashAccounts[0]
-      fromAccountId = firstChecking?.id ?? ''
-    }
-    setForm(p => ({ ...p, category_id, from_account_id: fromAccountId }))
+    const cashAccts = accounts.filter(a => ['checking', 'savings', 'cash'].includes(a.type))
+    const firstChecking = cashAccts.find(a => a.type === 'checking') ?? cashAccts[0]
+    setForm(p => ({ ...p, category_id, from_account_id: firstChecking?.id ?? '' }))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -100,18 +94,20 @@ export function LogExpenseButton() {
       .update({ current_balance: cat.current_balance - amount })
       .eq('id', form.category_id)
 
-    // 2. Payment category: reduce debt account balance + optionally reduce cash account
+    // 2. Deduct from cash account for all expenses
+    if (fromAccount) {
+      await db.from('accounts')
+        .update({ balance: fromAccount.balance - amount })
+        .eq('id', fromAccount.id)
+    }
+
+    // 3. Payment category: also reduce the debt account + record the transfer
     if (linkedDebtAccount) {
       await db.from('accounts')
         .update({ balance: Math.max(0, linkedDebtAccount.balance - amount) })
         .eq('id', linkedDebtAccount.id)
 
       if (fromAccount) {
-        await db.from('accounts')
-          .update({ balance: fromAccount.balance - amount })
-          .eq('id', fromAccount.id)
-
-        // Record the transfer for history
         await db.from('account_transfers').insert({
           user_id: user.id,
           from_account_id: fromAccount.id,
@@ -228,8 +224,8 @@ export function LogExpenseButton() {
                 </div>
               </div>
 
-              {/* Pay from account (only for payment categories with cash accounts) */}
-              {linkedDebtAccount && cashAccounts.length > 0 && (
+              {/* Pay from account */}
+              {cashAccounts.length > 0 && (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-foreground">Pay from account</label>
                   <select
