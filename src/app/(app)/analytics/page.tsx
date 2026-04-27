@@ -33,6 +33,7 @@ interface AnalyticsData {
   topCategories: CatBucket[]
   totalIncome: number
   totalSpending: number
+  totalInvested: number
 }
 
 const GROUP_COLORS: Record<string, string> = {
@@ -65,8 +66,7 @@ export default function AnalyticsPage() {
         .from('transactions')
         .select('amount, date, categories(name, group_name)')
         .eq('user_id', user.id)
-        .gte('date', startStr)
-        .lt('amount', 0),
+        .gte('date', startStr),
       supabase
         .from('income_events')
         .select('amount, received_at')
@@ -74,8 +74,12 @@ export default function AnalyticsPage() {
         .gte('received_at', startStr),
     ])
 
-    const txRows = (txResult.data ?? []) as { amount: number; date: string; categories: { name: string; group_name: string } | null }[]
+    const allTxRows = (txResult.data ?? []) as { amount: number; date: string; categories: { name: string; group_name: string } | null }[]
     const incomeRows = (incomeResult.data ?? []) as { amount: number; received_at: string }[]
+
+    // Split: expenses (amount < 0) vs investment allocations (amount > 0, group = investments)
+    const txRows = allTxRows.filter(t => t.amount < 0)
+    const investmentRows = allTxRows.filter(t => t.amount > 0 && t.categories?.group_name === 'investments')
 
     // ── Monthly buckets ───────────────────────────────────────────
     const monthlyIncome: Record<string, number> = {}
@@ -131,17 +135,17 @@ export default function AnalyticsPage() {
 
     const totalIncome = incomeRows.reduce((s, e) => s + e.amount, 0)
     const totalSpending = txRows.reduce((s, t) => s + Math.abs(t.amount), 0)
+    const totalInvested = investmentRows.reduce((s, t) => s + t.amount, 0)
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setData({ monthly, byGroup, topCategories, totalIncome, totalSpending })
+    setData({ monthly, byGroup, topCategories, totalIncome, totalSpending, totalInvested })
     setLoading(false)
   }, [])
 
   useEffect(() => { fetchData(period) }, [fetchData, period])
 
   const maxBar = data ? Math.max(...data.monthly.map(m => Math.max(m.income, m.spending)), 1) : 1
-  const savings = data ? data.totalIncome - data.totalSpending : 0
-  const savingsRate = data && data.totalIncome > 0 ? (savings / data.totalIncome) * 100 : 0
+  const savingsRate = data && data.totalIncome > 0 ? (data.totalInvested / data.totalIncome) * 100 : 0
   const maxGroup = data ? Math.max(...data.byGroup.map(g => g.amount), 1) : 1
   const maxCat = data?.topCategories[0]?.amount ?? 1
 
@@ -190,16 +194,14 @@ export default function AnalyticsPage() {
               <p className="text-xs text-muted-foreground mt-0.5">last {period} months</p>
             </div>
             <div className="bg-card rounded-xl border border-border p-4">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Saved</p>
-              <p className={`text-xl font-bold ${savings >= 0 ? 'text-foreground' : 'text-rose-600'}`}>
-                {formatCurrency(Math.abs(savings))}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">{savings < 0 ? 'overspent' : 'net positive'}</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Invested</p>
+              <p className="text-xl font-bold text-indigo-600">{formatCurrency(data.totalInvested)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">into investment accounts</p>
             </div>
             <div className="bg-card rounded-xl border border-border p-4">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Savings Rate</p>
               <p className={`text-xl font-bold ${savingsRate >= 20 ? 'text-emerald-600' : savingsRate >= 10 ? 'text-amber-600' : 'text-rose-600'}`}>
-                {savingsRate >= 0 ? savingsRate.toFixed(1) : '0.0'}%
+                {savingsRate.toFixed(1)}%
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">{savingsRate >= 20 ? 'Great!' : savingsRate >= 10 ? 'Good' : 'Needs work'}</p>
             </div>
