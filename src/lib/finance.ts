@@ -21,13 +21,38 @@ export function groupLabel(group: CategoryGroup): string {
   return labels[group]
 }
 
+// Returns the effective days until the category's next due date.
+// For recurring categories that are nearly empty AND have an imminent due date,
+// advances by one cycle — the bill likely just got paid and the next cycle is starting.
+export function effectiveDaysUntilDue(cat: Category): number {
+  if (!cat.due_date) return 365
+  const today = new Date()
+  today.setHours(12, 0, 0, 0)
+  let due = new Date(cat.due_date + 'T12:00:00')
+  let diff = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+
+  const percentFunded = cat.target_amount > 0 ? cat.current_balance / cat.target_amount : 1
+
+  // Cycle just reset: recurring, nearly empty, due very soon → shift to next period
+  if (diff <= 7 && percentFunded < 0.15) {
+    if (cat.due_frequency === 'annual') {
+      due = new Date(due)
+      due.setFullYear(due.getFullYear() + 1)
+    } else if (cat.due_frequency === 'quarterly') {
+      due = new Date(due)
+      due.setMonth(due.getMonth() + 3)
+    }
+    diff = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  }
+
+  return Math.max(1, diff)
+}
+
 export function urgencyScore(cat: Category): number {
   if (cat.target_amount <= 0) return 0
   const deficit = Math.max(0, cat.target_amount - cat.current_balance)
   const fundedRatio = cat.current_balance / cat.target_amount
-  const daysUntilDue = cat.due_date
-    ? Math.max(1, (new Date(cat.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : 365
+  const daysUntilDue = effectiveDaysUntilDue(cat)
 
   const priorityWeight = 6 - cat.priority // priority 1 → weight 5, priority 5 → weight 1
   return priorityWeight * (1 - fundedRatio) * (1 / Math.max(1, daysUntilDue / 30)) * deficit

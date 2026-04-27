@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { computeAllocations } from '@/lib/finance'
+import { computeAllocations, effectiveDaysUntilDue } from '@/lib/finance'
 import type { Category } from '@/lib/supabase/types'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -10,32 +10,56 @@ function buildPrompt(income: number, categories: Category[], taxCarveout: number
   const taxReserved = income * (taxCarveout / 100)
   const afterTax = income - taxReserved
 
+  const today = new Date().toISOString().split('T')[0]
+
   const catData = categories
     .filter(c => c.target_amount > 0)
-    .map(c => ({
-      id: c.id,
-      name: c.name,
-      group: c.group_name,
-      priority: c.priority,
-      current_balance: Math.round(c.current_balance),
-      target_amount: Math.round(c.target_amount),
-      deficit: Math.max(0, Math.round(c.target_amount - c.current_balance)),
-      due_date: c.due_date ?? 'none',
-      due_frequency: c.due_frequency,
-    }))
+    .map(c => {
+      const daysUntilDue = Math.round(effectiveDaysUntilDue(c))
+      const percentFunded = Math.round((c.current_balance / c.target_amount) * 100)
+      const deficit = Math.max(0, Math.round(c.target_amount - c.current_balance))
+      return {
+        id: c.id,
+        name: c.name,
+        group: c.group_name,
+        priority: c.priority,
+        current_balance: Math.round(c.current_balance),
+        target_amount: Math.round(c.target_amount),
+        deficit,
+        percent_funded: percentFunded,
+        due_frequency: c.due_frequency ?? 'none',
+        days_until_due: daysUntilDue,
+      }
+    })
 
   return `You are helping a Canadian freelancer allocate $${income} CAD of income across their budget categories.
+
+TODAY: ${today}
 
 ALLOCATION RULES:
 1. Tax group (group: "taxes") gets ${taxCarveout}% = $${Math.round(taxReserved)} first — non-negotiable
 2. After taxes you have $${Math.round(afterTax)} for everything else
-3. Fund P1 (Critical) and P2 (Important) categories fully before any P4-P5 spending
-4. Never allocate more than a category's deficit — it's already funded above that
-5. Categories with imminent due_date have higher urgency — prioritize them
-6. If income exceeds all deficits, route surplus to Emergency Fund or first Goals category
-7. HARD LIMIT: the sum of all allocation amounts must equal exactly $${income} — not a dollar more, not a dollar less. Double-check your math before returning.
+3. Fund P1 and P2 categories before P3–P5, but read rules 4–6 carefully first
+4. Never allocate more than a category's deficit (deficit = 0 → skip entirely)
 
-TODAY: ${new Date().toISOString().split('T')[0]}
+5. FREQUENCY & AMORTIZATION — never try to fill a long-cycle category in one shot:
+   - annual (due_frequency: "annual"): allocate at most ~deficit/12 per income event
+   - quarterly: allocate at most ~deficit/3 per event
+   - monthly: full deficit is fair game if income allows
+   - "none" or "one_time": treat like monthly
+
+6. DAYS_UNTIL_DUE is already cycle-adjusted (if a recurring category just reset, it reflects the next cycle):
+   - days_until_due ≤ 30 → genuinely urgent, prioritize it
+   - days_until_due 31–90 → moderate urgency, partial funding OK
+   - days_until_due > 180 → low urgency, small proportional slice only
+
+7. PERCENT_FUNDED tells you how far along the category already is:
+   - percent_funded ≥ 90 AND days_until_due ≤ 14 → SKIP (ready to pay, topped up)
+   - percent_funded < 20 AND days_until_due > 200 → very low urgency (cycle just started)
+   - Low percent_funded + low days_until_due → genuinely behind, fund urgently
+
+8. If income exceeds all urgent needs, route surplus to Emergency Fund or first Goals category
+9. HARD LIMIT: the sum of all allocation amounts must equal exactly $${income}. Check your math.
 
 BUDGET CATEGORIES:
 ${JSON.stringify(catData, null, 2)}
