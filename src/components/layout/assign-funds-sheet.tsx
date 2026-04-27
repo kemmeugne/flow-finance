@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, Calculator } from 'lucide-react'
+import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, Calculator, PencilLine } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/finance'
@@ -33,7 +33,7 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
   const [rows, setRows] = useState<AllocationRow[]>([])
   const [categoryMap, setCategoryMap] = useState<Map<string, Category>>(new Map())
   const [aiSummary, setAiSummary] = useState<string | null>(null)
-  const [allocationSource, setAllocationSource] = useState<'ai' | 'algorithm'>('algorithm')
+  const [allocationSource, setAllocationSource] = useState<'ai' | 'algorithm' | 'manual'>('algorithm')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -90,6 +90,46 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
         target_amount: cat?.target_amount ?? 0,
       }
     }))
+    setLoading(false)
+    setStep('review')
+  }
+
+  async function handleManual() {
+    if (assignAmount <= 0) return
+    setLoading(true)
+
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
+
+    const { data: categories } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('group_name')
+      .order('sort_order')
+
+    const cats = (categories ?? []) as Category[]
+    const map = new Map(cats.map(c => [c.id, c]))
+    setCategoryMap(map)
+
+    setRows(
+      cats
+        .filter(c => c.target_amount > 0)
+        .map(cat => ({
+          category_id: cat.id,
+          name: cat.name,
+          group_name: cat.group_name as CategoryGroup,
+          suggested: 0,
+          confirmed: 0,
+          reasoning: '',
+          current_balance: cat.current_balance,
+          target_amount: cat.target_amount,
+        }))
+    )
+    setAllocationSource('manual')
+    setAiSummary(null)
     setLoading(false)
     setStep('review')
   }
@@ -169,13 +209,26 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
 
             <div className="flex-1" />
 
-            <button
-              type="submit"
-              disabled={loading || assignAmount <= 0}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
-            >
-              {loading ? 'Calculating…' : <><span>Get suggestions</span><ArrowRight className="w-4 h-4" /></>}
-            </button>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleManual}
+                disabled={loading || assignAmount <= 0}
+                className="flex-1 flex items-center justify-center gap-2 py-3 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-60"
+              >
+                <PencilLine className="w-4 h-4" />
+                Manual
+              </button>
+              <button
+                type="submit"
+                disabled={loading || assignAmount <= 0}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
+              >
+                {loading
+                  ? 'Calculating…'
+                  : <><Sparkles className="w-4 h-4" /><span>AI suggestions</span></>}
+              </button>
+            </div>
           </form>
         )}
 
@@ -196,6 +249,11 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
                   <p className="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-0.5">Claude AI suggestion</p>
                   <p className="text-sm text-sage-800">{aiSummary}</p>
                 </div>
+              </div>
+            ) : allocationSource === 'manual' ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted border border-border mb-4 text-xs text-muted-foreground shrink-0">
+                <PencilLine className="w-3.5 h-3.5 shrink-0" />
+                Manual allocation — enter the amount for each category below
               </div>
             ) : (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted border border-border mb-4 text-xs text-muted-foreground shrink-0">
