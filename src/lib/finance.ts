@@ -4,7 +4,8 @@ export function formatCurrency(amount: number, currency = 'CAD'): string {
   return new Intl.NumberFormat('fr-CA', {
     style: 'currency',
     currency,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount)
 }
 
@@ -48,6 +49,8 @@ export function computeAllocations(
 
   const active = categories.filter(c => c.is_active && c.target_amount > 0)
 
+  const round2 = (n: number) => parseFloat(n.toFixed(2))
+
   // Step 1: Tax carve-out from tax group
   const taxCats = active.filter(c => c.group_name === 'taxes')
   if (taxCats.length > 0) {
@@ -57,10 +60,10 @@ export function computeAllocations(
     const perTaxCat = taxAlloc / taxCats.length
 
     for (const cat of taxCats) {
-      const amt = Math.min(perTaxCat, Math.max(0, cat.target_amount - cat.current_balance))
+      const amt = round2(Math.min(perTaxCat, Math.max(0, cat.target_amount - cat.current_balance)))
       if (amt > 0) {
-        suggestions.push({ category_id: cat.id, amount: Math.round(amt), reasoning: `${taxCarveoutPercent}% tax carve-out` })
-        remaining -= amt
+        suggestions.push({ category_id: cat.id, amount: amt, reasoning: `${taxCarveoutPercent}% tax carve-out` })
+        remaining = round2(remaining - amt)
       }
     }
   }
@@ -78,28 +81,28 @@ export function computeAllocations(
     if (remaining <= 0) break
     const deficit = Math.max(0, cat.target_amount - cat.current_balance)
     const proportional = totalScore > 0 ? (score / totalScore) * remaining : 0
-    const amt = Math.min(deficit, proportional, remaining)
-    if (amt >= 1) {
+    const amt = round2(Math.min(deficit, proportional, remaining))
+    if (amt >= 0.01) {
       suggestions.push({
         category_id: cat.id,
-        amount: Math.round(amt),
+        amount: amt,
         reasoning: `Priority ${cat.priority} · ${Math.round((score / totalScore) * 100)}% of urgency score`,
       })
-      remaining -= amt
+      remaining = round2(remaining - amt)
     }
   }
 
   // Step 3: Remainder to emergency fund or first goal
-  if (remaining >= 1) {
+  if (remaining >= 0.01) {
     const emergencyFund = categories.find(c => c.name.toLowerCase().includes('emergency'))
     const target = emergencyFund ?? categories.find(c => c.group_name === 'goals')
     if (target) {
       const existing = suggestions.find(s => s.category_id === target.id)
       if (existing) {
-        existing.amount += Math.round(remaining)
+        existing.amount = round2(existing.amount + remaining)
         existing.reasoning += ' · surplus'
       } else {
-        suggestions.push({ category_id: target.id, amount: Math.round(remaining), reasoning: 'Surplus funds' })
+        suggestions.push({ category_id: target.id, amount: remaining, reasoning: 'Surplus funds' })
       }
     }
   }

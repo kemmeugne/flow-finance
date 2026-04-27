@@ -106,14 +106,15 @@ export async function POST(request: Request) {
         let suggestions = input.allocations.filter(a => a.amount > 0)
 
         // Clamp total to income — AI can hallucinate amounts that don't add up
-        const rawTotal = suggestions.reduce((s, a) => s + a.amount, 0)
-        if (rawTotal > income + 0.5) {
+        const r2 = (n: number) => parseFloat(n.toFixed(2))
+        const rawTotal = r2(suggestions.reduce((s, a) => s + a.amount, 0))
+        if (rawTotal > income + 0.01) {
           const scale = income / rawTotal
-          suggestions = suggestions.map(a => ({ ...a, amount: Math.round(a.amount * scale) }))
-          // Fix rounding drift so the total is exact
-          const scaledTotal = suggestions.reduce((s, a) => s + a.amount, 0)
-          const drift = Math.round(income) - scaledTotal
-          if (drift !== 0 && suggestions.length > 0) suggestions[0].amount += drift
+          suggestions = suggestions.map(a => ({ ...a, amount: r2(a.amount * scale) }))
+          // Fix rounding drift so the total is exact to the cent
+          const scaledTotal = r2(suggestions.reduce((s, a) => s + a.amount, 0))
+          const drift = r2(r2(income) - scaledTotal)
+          if (Math.abs(drift) >= 0.01 && suggestions.length > 0) suggestions[0].amount = r2(suggestions[0].amount + drift)
         }
 
         return NextResponse.json({ suggestions, categories: cats, source: 'ai', summary: input.summary })

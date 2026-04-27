@@ -120,8 +120,8 @@ export default function IncomePage() {
   }
 
   function updateAmount(category_id: string, raw: string) {
-    const value = Math.max(0, parseFloat(raw) || 0)
-    setRows(prev => prev.map(r => r.category_id === category_id ? { ...r, confirmed: value } : r))
+    const value = parseFloat(parseFloat(raw || '0').toFixed(2))
+    setRows(prev => prev.map(r => r.category_id === category_id ? { ...r, confirmed: Math.max(0, value) } : r))
   }
 
   const grossAmount = parseFloat(form.amount) || 0
@@ -131,7 +131,7 @@ export default function IncomePage() {
   const income = netIncome
   const totalConfirmed = rows.reduce((s, r) => s + r.confirmed, 0)
   const remaining = income - totalConfirmed
-  const overAllocated = remaining < -0.5
+  const overAllocated = remaining < -0.01
 
   async function handleConfirm() {
     if (overAllocated) return
@@ -485,7 +485,7 @@ export default function IncomePage() {
                           <input
                             type="number"
                             min="0"
-                            step="1"
+                            step="0.01"
                             value={row.confirmed || ''}
                             onChange={e => updateAmount(row.category_id, e.target.value)}
                             className="w-28 pl-7 pr-2 py-1.5 rounded-lg border border-sage-200 bg-background text-sm text-right focus:outline-none focus:ring-2 focus:ring-sage-500"
@@ -515,12 +515,12 @@ export default function IncomePage() {
                   Over by {formatCurrency(Math.abs(remaining))}
                 </span>
               )}
-              {!overAllocated && remaining > 0.5 && (
+              {!overAllocated && remaining > 0.01 && (
                 <span className="text-amber-600 font-medium">
                   {formatCurrency(remaining)} unallocated
                 </span>
               )}
-              {!overAllocated && remaining <= 0.5 && (
+              {!overAllocated && remaining <= 0.01 && (
                 <span className="text-emerald-600 font-medium">Fully allocated</span>
               )}
             </div>
