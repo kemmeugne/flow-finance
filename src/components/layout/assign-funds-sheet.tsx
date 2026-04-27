@@ -37,6 +37,8 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showAnalysis, setShowAnalysis] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<{ prompt: string; rawResponse: unknown } | null>(null)
+  const [showDebug, setShowDebug] = useState(false)
 
   function handleOpenChange(v: boolean) {
     if (v && account) {
@@ -66,15 +68,17 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
 
     if (!res.ok) { setLoading(false); return }
 
-    const { suggestions, categories, source, summary } = await res.json() as {
+    const { suggestions, categories, source, summary, debug } = await res.json() as {
       suggestions: AllocationSuggestion[]
       categories: Category[]
       source: 'ai' | 'algorithm'
       summary: string | null
+      debug: { prompt: string; rawResponse: unknown } | null
     }
 
     setAllocationSource(source)
     setAiSummary(summary)
+    setDebugInfo(debug ?? null)
 
     const map = new Map(categories.map((c: Category) => [c.id, c]))
     setCategoryMap(map)
@@ -293,6 +297,33 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Debug panel */}
+            {debugInfo && (
+              <div className="mb-4 shrink-0">
+                <button
+                  onClick={() => setShowDebug(v => !v)}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showDebug ? 'rotate-180' : ''}`} />
+                  Debug: AI prompt &amp; raw response
+                </button>
+                {showDebug && (
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Prompt</p>
+                      <pre className="text-xs bg-muted border border-border p-2 rounded-lg overflow-auto max-h-48 whitespace-pre-wrap break-words">{debugInfo.prompt}</pre>
+                    </div>
+                    {!!debugInfo.rawResponse && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Raw response</p>
+                        <pre className="text-xs bg-muted border border-border p-2 rounded-lg overflow-auto max-h-48">{JSON.stringify(debugInfo.rawResponse as Record<string, unknown>, null, 2)}</pre>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

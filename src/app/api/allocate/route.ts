@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { computeAllocations, effectiveDaysUntilDue } from '@/lib/finance'
+import { computeAllocations, effectiveDaysUntilDue, effectiveDeficit } from '@/lib/finance'
 import type { Category } from '@/lib/supabase/types'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -17,7 +17,9 @@ function buildPrompt(income: number, categories: Category[], taxCarveout: number
     .map(c => {
       const daysUntilDue = Math.round(effectiveDaysUntilDue(c))
       const percentFunded = Math.round((c.current_balance / c.target_amount) * 100)
-      const deficit = Math.max(0, Math.round(c.target_amount - c.current_balance))
+      const currentDeficit = Math.max(0, Math.round(c.target_amount - c.current_balance))
+      const effDeficit = Math.round(effectiveDeficit(c))
+      const isPreFunding = effDeficit > currentDeficit
       return {
         id: c.id,
         name: c.name,
@@ -25,7 +27,9 @@ function buildPrompt(income: number, categories: Category[], taxCarveout: number
         priority: c.priority,
         current_balance: Math.round(c.current_balance),
         target_amount: Math.round(c.target_amount),
-        deficit,
+        current_deficit: currentDeficit,
+        effective_deficit: effDeficit,
+        is_pre_funding_next_cycle: isPreFunding,
         percent_funded: percentFunded,
         due_frequency: c.due_frequency ?? 'none',
         days_until_due: daysUntilDue,
@@ -40,26 +44,29 @@ ALLOCATION RULES:
 1. Tax group (group: "taxes") gets ${taxCarveout}% = $${Math.round(taxReserved)} first — non-negotiable
 2. After taxes you have $${Math.round(afterTax)} for everything else
 3. Fund P1 and P2 categories before P3–P5, but read rules 4–6 carefully first
-4. Never allocate more than a category's deficit (deficit = 0 → skip entirely)
 
-5. FREQUENCY & AMORTIZATION — never try to fill a long-cycle category in one shot:
-   - annual (due_frequency: "annual"): allocate at most ~deficit/12 per income event
-   - quarterly: allocate at most ~deficit/3 per event
-   - monthly: full deficit is fair game if income allows
-   - "none" or "one_time": treat like monthly
+4. ALLOCATION CAP: never exceed a category's effective_deficit.
+   - effective_deficit = current_deficit for most categories
+   - When is_pre_funding_next_cycle = true: the category is fully funded for this cycle but due very soon (the money will be spent in days). effective_deficit = target_amount for the NEXT cycle. Treat this like a fresh unfunded category — fund it up to target_amount.
+   - Never allocate to a category where effective_deficit = 0
 
-6. DAYS_UNTIL_DUE is already cycle-adjusted (if a recurring category just reset, it reflects the next cycle):
-   - days_until_due ≤ 30 → genuinely urgent, prioritize it
-   - days_until_due 31–90 → moderate urgency, partial funding OK
-   - days_until_due > 180 → low urgency, small proportional slice only
+5. PRIORITY & PRE-FUNDING — high-priority recurring categories near end of cycle come FIRST:
+   - If is_pre_funding_next_cycle = true AND priority ≤ 2: fund before any P3+ categories
+   - Monthly bills (rent, groceries, etc.) with days_until_due ≤ 10: pre-fund them fully before lifestyle/goals
+   - Quarterly with days_until_due ≤ 21: same treatment
 
-7. PERCENT_FUNDED tells you how far along the category already is:
-   - percent_funded ≥ 90 AND days_until_due ≤ 14 → SKIP (ready to pay, topped up)
-   - percent_funded < 20 AND days_until_due > 200 → very low urgency (cycle just started)
-   - Low percent_funded + low days_until_due → genuinely behind, fund urgently
+6. FREQUENCY & AMORTIZATION — for categories NOT near end of cycle:
+   - annual: allocate at most ~current_deficit/12 per income event
+   - quarterly: allocate at most ~current_deficit/3 per event
+   - monthly: full deficit is fair game
 
-8. If income exceeds all urgent needs, route surplus to Emergency Fund or first Goals category
-9. HARD LIMIT: the sum of all allocation amounts must equal exactly $${income}. Check your math.
+7. DAYS_UNTIL_DUE is cycle-adjusted. PERCENT_FUNDED shows current fill:
+   - days_until_due ≤ 30 → urgent (unless is_pre_funding_next_cycle overrides)
+   - days_until_due > 180 → low urgency
+   - percent_funded ≥ 90 AND days_until_due ≤ 14 AND is_pre_funding_next_cycle = false → SKIP
+
+8. Route any surplus to Emergency Fund or first Goals category
+9. HARD LIMIT: allocations must sum to exactly $${income}. Check your math.
 
 BUDGET CATEGORIES:
 ${JSON.stringify(catData, null, 2)}
@@ -84,6 +91,8 @@ export async function POST(request: Request) {
   const cats = (categories ?? []) as Category[]
 
   // ── Try Claude Haiku ──────────────────────────────────────────────
+  const prompt = buildPrompt(income, cats, taxCarveout)
+
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       const response = await anthropic.messages.create({
@@ -118,7 +127,7 @@ export async function POST(request: Request) {
           },
         ],
         tool_choice: { type: 'tool', name: 'allocate_income' },
-        messages: [{ role: 'user', content: buildPrompt(income, cats, taxCarveout) }],
+        messages: [{ role: 'user', content: prompt }],
       })
 
       const toolBlock = response.content.find(b => b.type === 'tool_use')
@@ -141,7 +150,13 @@ export async function POST(request: Request) {
           if (Math.abs(drift) >= 0.01 && suggestions.length > 0) suggestions[0].amount = r2(suggestions[0].amount + drift)
         }
 
-        return NextResponse.json({ suggestions, categories: cats, source: 'ai', summary: input.summary })
+        return NextResponse.json({
+          suggestions,
+          categories: cats,
+          source: 'ai',
+          summary: input.summary,
+          debug: { prompt, rawResponse: input },
+        })
       }
     } catch (err) {
       console.error('Claude allocation failed, falling back to algorithm:', err)
@@ -150,5 +165,11 @@ export async function POST(request: Request) {
 
   // ── Fallback: deterministic algorithm ────────────────────────────
   const suggestions = computeAllocations(income, cats, taxCarveout)
-  return NextResponse.json({ suggestions, categories: cats, source: 'algorithm', summary: null })
+  return NextResponse.json({
+    suggestions,
+    categories: cats,
+    source: 'algorithm',
+    summary: null,
+    debug: { prompt, rawResponse: null },
+  })
 }

@@ -48,20 +48,38 @@ export function effectiveDaysUntilDue(cat: Category): number {
   return Math.max(1, diff)
 }
 
+// Returns the actionable deficit for a category, including pre-funding for the
+// next cycle when a recurring category is fully funded and near its due date.
+// Monthly threshold: 10 days. Quarterly: 21 days.
+export function effectiveDeficit(cat: Category): number {
+  if (cat.target_amount <= 0) return 0
+  const days = effectiveDaysUntilDue(cat)
+  const currentDeficit = Math.max(0, cat.target_amount - cat.current_balance)
+  const isRecurring = ['monthly', 'quarterly'].includes(cat.due_frequency ?? '')
+  const threshold = cat.due_frequency === 'monthly' ? 10 : 21
+  const prefund = isRecurring && currentDeficit === 0 && days <= threshold
+    ? cat.target_amount
+    : 0
+  return currentDeficit + prefund
+}
+
 export function urgencyScore(cat: Category): number {
   if (cat.target_amount <= 0) return 0
-  const deficit = Math.max(0, cat.target_amount - cat.current_balance)
-  const fundedRatio = cat.current_balance / cat.target_amount
-  const daysUntilDue = effectiveDaysUntilDue(cat)
-
+  const deficit = effectiveDeficit(cat)
+  if (deficit <= 0) return 0
+  const days = effectiveDaysUntilDue(cat)
+  // Pre-funding case: treat next cycle as completely unfunded
+  const currentDeficit = Math.max(0, cat.target_amount - cat.current_balance)
+  const isPreFunding = deficit > currentDeficit
+  const fundedRatio = isPreFunding ? 0 : cat.current_balance / cat.target_amount
   const priorityWeight = 6 - cat.priority // priority 1 → weight 5, priority 5 → weight 1
-  return priorityWeight * (1 - fundedRatio) * (1 / Math.max(1, daysUntilDue / 30)) * deficit
+  return priorityWeight * (1 - fundedRatio) * (1 / Math.max(1, days / 30)) * deficit
 }
 
 export function getSkipReason(cat: Category): string {
   if (cat.target_amount <= 0) return 'No target amount set'
-  const deficit = cat.target_amount - cat.current_balance
-  if (deficit <= 0) return 'Already fully funded'
+  const deficit = effectiveDeficit(cat)
+  if (deficit <= 0) return 'Already fully funded — no next-cycle pre-funding needed'
   const pct = Math.round((cat.current_balance / cat.target_amount) * 100)
   if (pct >= 90) return `${pct}% funded — nearly ready to pay`
   const days = Math.round(effectiveDaysUntilDue(cat))
@@ -111,7 +129,7 @@ export function computeAllocations(
     }
   }
 
-  // Step 2: Score and allocate remaining by urgency
+  // Step 2: Score and allocate remaining by urgency (uses effectiveDeficit for pre-funding)
   const nonTax = active.filter(c => c.group_name !== 'taxes')
   const scored = nonTax
     .map(cat => ({ cat, score: urgencyScore(cat) }))
@@ -122,7 +140,7 @@ export function computeAllocations(
 
   for (const { cat, score } of scored) {
     if (remaining <= 0) break
-    const deficit = Math.max(0, cat.target_amount - cat.current_balance)
+    const deficit = effectiveDeficit(cat)
     const proportional = totalScore > 0 ? (score / totalScore) * remaining : 0
     const amt = round2(Math.min(deficit, proportional, remaining))
     if (amt >= 0.01) {
