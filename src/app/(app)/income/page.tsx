@@ -102,17 +102,18 @@ export default function IncomePage() {
     const map = new Map(categories.map((c: Category) => [c.id, c]))
     setCategoryMap(map)
 
-    const allRows: AllocationRow[] = suggestions.map(s => {
-      const cat = map.get(s.category_id)
+    const suggestionMap = new Map(suggestions.map(s => [s.category_id, s]))
+    const allRows: AllocationRow[] = categories.map((cat: Category) => {
+      const s = suggestionMap.get(cat.id)
       return {
-        category_id: s.category_id,
-        name: cat?.name ?? 'Unknown',
-        group_name: (cat?.group_name ?? 'bills') as CategoryGroup,
-        suggested: s.amount,
-        confirmed: s.amount,
-        reasoning: s.reasoning,
-        current_balance: cat?.current_balance ?? 0,
-        target_amount: cat?.target_amount ?? 0,
+        category_id: cat.id,
+        name: cat.name,
+        group_name: cat.group_name as CategoryGroup,
+        suggested: s?.amount ?? 0,
+        confirmed: s?.amount ?? 0,
+        reasoning: s?.reasoning ?? '',
+        current_balance: cat.current_balance,
+        target_amount: cat.target_amount,
       }
     })
 
@@ -459,9 +460,11 @@ export default function IncomePage() {
       return acc
     }, {} as Record<string, AllocationRow[]>)
 
-    const fundedIds = new Set(rows.map(r => r.category_id))
     const skippedCats = allocationSource !== 'manual'
-      ? Array.from(categoryMap.values()).filter(c => !fundedIds.has(c.id) && c.target_amount > 0)
+      ? rows
+          .filter(r => r.suggested === 0 && r.target_amount > 0)
+          .map(r => categoryMap.get(r.category_id))
+          .filter((c): c is Category => c !== undefined)
       : []
 
     return (
