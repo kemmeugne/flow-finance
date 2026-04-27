@@ -39,20 +39,21 @@ For security, you are **not** logged in automatically at this point. Click **Sig
 
 **24 default categories are automatically created** for you when you sign up, covering the most common budget buckets for a Canadian freelancer. You can rename, edit, or remove any of them.
 
-### 2. Review your categories
+### 2. Add your accounts (optional but recommended)
 
-Go to **Categories** in the sidebar. You will see all your budget categories. For each one, check:
+Go to **Accounts** in the sidebar and add your real-world financial accounts — your checking account, savings, credit cards, loans, and investment accounts. This unlocks the net worth view and lets you track exactly which account money flows through.
 
-- **Target amount** — how much should ideally be in this bucket (e.g. $1,500 for rent, $10,000 for emergency fund)
-- **Current balance** — how much is actually in it right now
-- **Priority** — how critical it is (P1 = must fund first, P5 = nice to have)
-- **Due date** — when it next needs to be paid (optional, but helps the AI prioritize)
+### 3. Review your categories
 
-Take 10 minutes to adjust these to match your actual life. The more accurate your targets and priorities, the better the AI allocations will be.
+Go to **Categories** in the sidebar. Adjust the target amounts, priorities, and due dates to match your actual life.
 
-### 3. Enter your first income
+### 4. Assign your existing funds
 
-Go to **Add Income** in the sidebar. Enter the amount and where it came from. The AI will instantly suggest how to split it across all your categories. Review the suggestion, adjust any amounts if you want, then confirm. Your category balances update immediately.
+If you already have money in your accounts that hasn't been budgeted yet, go to **Accounts**, hover over any cash account row, and click the **banknote icon** to assign that money to your categories.
+
+### 5. Enter income as it arrives
+
+Go to **Add Income** in the sidebar each time you receive a payment. The AI will suggest how to split it. Review, adjust, confirm.
 
 ---
 
@@ -62,262 +63,271 @@ Go to **Add Income** in the sidebar. Enter the amount and where it came from. Th
 
 The dashboard is your home screen. It gives you a full picture of your financial health at a glance.
 
-**Summary row (top)**
-Four cards showing:
-- *Total Funded* — sum of all current balances across every category
-- *Overall Funded %* — how funded you are relative to all your targets combined
-- *Categories* — how many active budget buckets you have
-- *Underfunded* — how many categories are below 50% of their target
+**Net Worth widget**
+If you have accounts set up, three cards show your total Net Worth, Assets (cash + investments), and Liabilities (credit + loans). This updates automatically as you log income, expenses, and debt payments.
+
+**Summary row**
+Four cards showing total funded, overall funded %, category count, and underfunded count.
 
 **Needs funding alert**
-If any categories are below 50% of their target, a red banner lists them in order of urgency. This is your action list for your next income entry.
+If any categories are below 50% of their target, a banner lists them in order of urgency.
 
 **Upcoming Due Dates**
-Any category with a due date in the next 45 days appears here, sorted by how soon it's due. Each row shows:
-- How many days until it's due
-- The category name and group
-- A mini progress bar showing how funded it is
-- How much money is still needed
-
-Items due within 7 days are highlighted in red. This section is designed to make sure nothing sneaks up on you.
-
-**Category cards**
-Below the alerts, all your categories are shown grouped by type (Taxes, Bills, etc.), each with a progress bar, current balance vs target, priority badge, and a yellow "Due in Xd" badge if it's due within 14 days.
+Categories with a due date in the next 45 days, sorted by how soon they're due. Items due within 7 days are highlighted in red.
 
 **Action buttons (top right)**
-Three buttons are always available from the dashboard:
 - **Add Income** — enter a new income payment
-- **Log Expense** — record a purchase against a specific category
+- **Log Expense** — record a purchase against a category
 - **Can I afford this?** — ask the AI whether a purchase is a good idea right now
 
 ---
 
-### Categories
+### Accounts
 
-This screen lets you manage all your budget buckets.
+This screen is your financial account manager. Add every account you have — checking, savings, credit cards, loans, investments — to get a complete net worth picture.
 
-**Adding a category**
-Click **Add category** (top right). Fill in:
-- *Name* — what is this bucket for? (e.g. "Rent", "MacBook fund")
-- *Group* — which type does it belong to?
-- *Target amount* — how much should it hold? (leave at 0 if you just want a spending bucket with no target)
-- *Current balance* — how much is already in it? (useful when setting up for the first time)
-- *Priority* — P1 = critical (always fund first), P2 = important, P3 = standard, P4 = optional, P5 = nice to have
-- *Due date* — when does this next need to be paid? (optional)
-- *Due frequency* — monthly, quarterly, annual, one-time, or none
-- *Notes* — any extra context you want to remember
+**Account types supported**
 
-**Editing a category**
-Click the pencil icon on any category card. All fields are editable.
+| Group | Types |
+|---|---|
+| Cash | Checking, Savings, Cash |
+| Credit | Credit Card, Line of Credit |
+| Loans & Mortgages | Mortgage, Auto Loan, Student Loan, Personal Loan, Medical Debt, Other Debt |
+| Investments | TFSA, FHSA, RRSP, RDSP, Other Investment |
 
-**Archiving a category**
-Click the archive (trash) icon. The category is hidden from all screens but your transaction history is preserved. Archived categories do not receive AI allocations.
+**Adding an account**
+Click **Add Account** and fill in:
+- *Name* — e.g. "RBC Checking", "TD Visa"
+- *Type* — cannot be changed after creation
+- *Balance* — current balance (what you have for cash/investments, what you owe for debts)
+- *Credit limit* and *Interest rate* — for credit cards and lines of credit
+- *Minimum monthly payment* — for debt accounts; creates a linked payment category automatically
+- *Contribution room*, *Annual limit*, *Contributed this year* — for registered accounts (TFSA, FHSA, etc.)
 
-> **Tip:** Never delete a category that has transaction history — archive it instead. This keeps your past records intact.
+**Debt accounts and payment categories**
+When you add a credit card, loan, or any other debt account, Flow Finance automatically creates a payment category (e.g. "TD Visa Payment") in your Bills group. When you log an expense against that payment category, the app reduces both your category balance and the debt account's outstanding balance.
+
+**Row actions (hover to reveal)**
+- **Banknote icon** — Assign existing funds to categories (cash accounts only)
+- **Sliders icon** — Adjust balance (reconcile with your real bank balance)
+- **Pencil icon** — Edit account details
+- **Trash icon** — Archive (hides the account; history is preserved)
+
+**Adjust Balance (reconciliation)**
+If your in-app balance drifts from your real bank statement, click the sliders icon. Enter the actual balance — the dialog shows the current amount and the difference — then click **Update balance**.
+
+---
+
+### Assign Funds (from Accounts)
+
+When you have money sitting in a cash account that hasn't been assigned to any categories yet, use this flow to budget it.
+
+**How to open it:** hover over any checking, savings, or cash account row on the Accounts screen and click the banknote icon.
+
+**The flow:**
+1. Enter the amount to assign (pre-filled with your account balance, editable)
+2. Choose how to allocate:
+   - **Manual** — all your active categories appear at $0; fill in the amounts yourself
+   - **AI suggestions** — the app calls Claude to suggest how to split the money across your categories (same as the income allocation flow, but with no tax carve-out)
+3. Review the allocation — adjust any amounts, watch the progress bar
+4. Click **Confirm & apply** — your category balances are updated immediately
+
+> **Note:** The account balance does not change — the money was already in the account. This flow only updates category balances to reflect how that money is designated.
 
 ---
 
 ### Add Income
 
-This is where you use the app's core feature. Use this screen every time you receive a payment.
+Use this screen every time you receive a payment.
 
 **Step 1 — Enter the income**
-- *Amount* — how much did you receive (gross, before anything)?
-- *Source* — who paid you? (e.g. "Client ABC", "Freelance project")
-- *Date* — when was it received?
 
-Click **Get AI allocation**.
+- *Amount* — gross amount received
+- **Taxable income toggle** — on by default. Turn it **off** for non-taxable income (reimbursements, gifts, GST refunds) — this skips the tax carve-out entirely so no money is routed to your tax categories
+- *GST / QST* — optional. Enter the tax amounts collected from your client. The app subtracts them from the gross to compute your **net income** (the amount you actually earned). All allocations are calculated on the net amount.
+- *Destination account* — optional. If selected, the income amount is added to that account's balance
+- *Source* — who paid you?
+- *Date received*
+- *Notes*
 
-**Step 2 — Review the AI suggestion**
+At the bottom, two buttons:
 
-The AI (Claude Haiku) reads your current category balances, targets, priorities, and due dates, then suggests exactly how to split your income. The screen shows:
+- **Assign manually** — skips the AI; opens the review step with all your active categories at $0. You fill in the amounts yourself.
+- **AI suggestions** — calls Claude Haiku (or the built-in algorithm as fallback) to suggest how to split the income
 
-- An **AI strategy summary** — one sentence explaining the overall approach (e.g. "Prioritized tax reserve and rent, then distributed surplus to emergency fund")
-- A list of every category receiving money, with the suggested amount and a one-line reason
-- An editable amount field for each category so you can override any suggestion
+**Step 2 — Review the allocation**
 
-The AI always sets aside your **tax carve-out percentage** (configurable in Settings, default 27%) before allocating the rest. This ensures you never accidentally spend money that belongs to the government.
+The review screen shows a badge identifying the allocation source:
+- ✨ *Claude AI suggestion* — with a one-sentence strategy summary
+- *Built-in algorithm* — when the API is unavailable
+- *Manual allocation* — when you chose to assign manually
 
-You can increase or decrease any amount. The total remaining shows you how much is left to allocate.
+Every category receiving money is shown with the suggested amount and a reasoning note. You can change any amount. The footer shows:
+- How much is allocated vs the total
+- *Fully allocated* (green), *X unallocated* (amber), or *Over by X* (red, blocks confirm)
+- A progress bar
 
 **Step 3 — Confirm**
 
-Click **Confirm allocation**. The app:
-1. Records the income event
-2. Saves the allocations
-3. Updates all category balances instantly
-
-You are redirected to the dashboard where you can see the updated balances.
-
-> **What if there's no internet or the AI fails?** The app automatically falls back to a built-in algorithm that does the same prioritisation logic. You will see a small notice saying "Calculated by algorithm" instead of the AI summary. The result is very similar.
+Click **Confirm & apply**. The app records the income event, saves the allocations, and updates all category balances. If a destination account was selected, its balance is also updated.
 
 ---
 
 ### Goals
 
-This screen shows only your **Goals group** categories in a dedicated view, making it easy to track progress toward longer-term savings targets.
+Dedicated view for your **Goals** group categories.
 
 Each goal card shows:
-- Goal name and target date (if set)
-- A violet progress bar and percentage funded
-- Current balance vs target amount
-- **Monthly amount needed** — automatically calculated as `(amount still needed) ÷ (months until due date)`. This tells you exactly how much to allocate each month to hit the goal on time.
-- A "Goal reached! 🎉" state when the balance meets or exceeds the target
+- Progress bar (violet) and % funded
+- Current balance vs target
+- **Monthly amount needed** = `(target − current balance) ÷ months until due date`
+- "Goal reached!" state at 100%
 
-The summary at the top shows your total saved across all goals, how many goals are active, and how many are fully funded.
-
-> **Example:** You want $6,000 for a vacation by December (8 months away). You currently have $1,200. The app shows "$600/month needed" and "$4,800 remaining · 8 months to go".
+The summary row shows: total saved, active goals, completed goals.
 
 ---
 
 ### Transactions
 
-A complete history of all your financial activity, organised by month.
+A complete history of all financial activity, by month.
 
-**Month picker**
-Use the left and right arrows to navigate between months. The current month is the default. You cannot go past the current month.
+**Month picker** — use ← → to navigate. Current month is the default.
 
-**Summary cards**
-Three cards at the top show the totals for the selected month:
-- *Income* — total of all income events received that month (green)
-- *Spent* — total of all expenses logged that month (red)
-- *Net* — income minus spending. Green if positive (you saved money), red if negative
+**Account filter** — if you have accounts set up, a dropdown appears next to the month picker. Select an account to see only income and expenses linked to that account. Select "All accounts" to see everything.
+
+**Summary cards** — Income, Spent, Net for the selected month (and account filter, if active).
 
 **Activity list**
-- Income events appear first, labelled with the source name and date
-- Expenses appear below, grouped by date (newest first), showing the description and which category the money came from
+- Income events appear at the top with a green icon, source name, date, and account badge (if linked)
+- Expenses appear below, grouped by date newest-first, showing description, category, and account badge
 
 **Export CSV**
-The **Export CSV** button appears whenever there is data for the selected month. Clicking it downloads a `.csv` file named `flow-finance-YYYY-MM.csv` with these columns:
+Downloads `flow-finance-YYYY-MM.csv` with columns:
 
 ```
-Date | Type | Description | Category | Amount (CAD)
+Date | Type | Description | Category | Account | Amount (CAD)
 ```
 
-This file can be opened in Excel, Google Sheets, or any spreadsheet software for your own analysis, accounting, or tax preparation.
+---
+
+### Analytics
+
+Spending trends and income history across a rolling period.
+
+**Period selector** — 3M, 6M, or 12M toggle in the top-right corner.
+
+**Summary cards**
+- *Income* — total received in the period
+- *Spent* — total spent
+- *Saved* — net (income minus spending)
+- *Savings Rate* — % of income saved. ≥20% = green, ≥10% = amber, below 10% = red
+
+**Monthly Overview chart**
+Side-by-side bars for each month: emerald = income, rose = spending. Below the chart, the best income month and highest spending month are highlighted.
+
+**Spending by Group**
+Horizontal progress bars showing each category group's share of total spending, in descending order.
+
+**Top Categories**
+The 8 highest-spend categories in the period, ranked with colored bars.
 
 ---
 
 ### Settings
 
 **Tax Carve-out %**
-The single most important setting in the app. This is the percentage of every income payment that gets reserved for taxes *before* anything else is allocated. The default is 27%, which is a reasonable starting point for a Canadian freelancer earning $60,000–$80,000/year.
+The percentage of every income payment reserved for taxes before anything else is allocated. Default 27% — a reasonable starting point for a Canadian freelancer at $60,000–$80,000/year.
 
-- Use the slider or type a number directly (range: 5% to 50%)
-- A live example shows the exact impact: "On a $5,000 income, $1,350 goes to taxes, leaving $3,650 to allocate"
+- Use the slider or type a number (range: 5% to 50%)
+- Live example: "On a $5,000 income, $1,350 goes to taxes, leaving $3,650 to allocate"
 
-> **Canadian freelancers:** If you're incorporated, your effective rate may be lower (15–20%). If you're a sole proprietor in a higher tax bracket, consider 30–35%. When in doubt, set it higher — you can always move money out of the tax bucket, but you can't pay the CRA with money you already spent.
+> You can also bypass this per income entry using the **Taxable income toggle** on the Add Income form.
 
 **Currency**
-Selects the display currency for all amounts. Options: CAD, USD, EUR, GBP. This is cosmetic — all stored amounts remain in the currency you entered them in.
-
-Click **Save settings** to apply changes. A "Saved" confirmation appears briefly.
-
----
-
-### Can I afford this? (AI advisor)
-
-Accessible from the **Can I afford this?** button on the dashboard.
-
-This feature lets you quickly gut-check any potential purchase against your current budget before committing to it.
-
-**How to use it:**
-1. Enter the amount (e.g. $800)
-2. Describe what it's for (e.g. "New monitor for my home office")
-3. Click **Ask Claude**
-
-The AI reads your current category balances in real time and returns:
-
-- A **verdict**: green (yes, go ahead), amber (possible but be careful), or red (not recommended)
-- A **headline**: one-sentence summary of the verdict
-- **Reasoning**: 2–3 sentences with specific numbers explaining why
-- **Suggested category**: which category this should logically come from, and what the balance would be after the purchase
-
-> **Example response:**
-> *Verdict: Yes*
-> *"You can comfortably cover this from your Lifestyle budget."*
-> *"Your Lifestyle category has $1,240 available, well above the $800 cost. All critical P1/P2 categories are fully funded this month, so this purchase won't affect anything important. You'll have $440 left in Lifestyle after."*
-> *Take it from: Lifestyle → $440 remaining*
-
-Use this feature before any non-routine purchase. It takes about 2 seconds and costs a fraction of a cent.
+Display currency for all amounts (CAD / USD / EUR / GBP). Cosmetic only — stored amounts are in the currency you entered them in.
 
 ---
 
 ### Log Expense (expense drawer)
 
-Accessible from the **Log Expense** button on the dashboard.
+Opened from **Log Expense** on the dashboard.
 
-Use this every time you spend money from one of your budget categories.
+**Fields:** Category, Amount, Description, Date, and (for payment categories) Pay from account.
 
-**Fields:**
-- *Category* — which budget bucket is this coming from? The dropdown shows all active categories with their current balance.
-- *Amount* — how much did you spend?
-- *Description* — what did you buy? (e.g. "Groceries at Metro", "Adobe CC subscription")
-- *Date* — when did you spend it? (defaults to today)
+**Payment category detection**
+If you select a category linked to a debt account (e.g. "TD Visa Payment"), the app shows a banner confirming which debt account will be reduced, auto-selects your first checking account as the payment source, and on save:
+1. Deducts from the category balance
+2. Reduces the debt account's outstanding balance
+3. Reduces the cash account's balance
+4. Records an account transfer for history
 
-A **live balance preview** under the category selector shows: current balance → balance after this expense. It turns red if the expense would put the category into a negative balance.
+**Live balance preview** — shows current → balance after this expense (red if it would go negative).
 
-After logging, your category balance updates instantly and the transaction appears in the Transactions history.
+---
 
-> **Important:** Log Expense only records the spend and updates the balance. It does not transfer money between categories. If you overspend one category, you need to move money manually by editing the category's current balance, or by allocating more to it on your next income entry.
+### Can I Afford This? (AI advisor)
+
+Opened from **Can I afford this?** on the dashboard.
+
+Enter an amount and what it's for, then click **Ask Claude**. The AI reads your current category balances in real time and returns:
+
+- A **verdict**: green (yes), amber (caution), or red (not recommended)
+- A **headline** and 2–3 sentence reasoning with specific numbers
+- The **suggested category** and remaining balance after the purchase
 
 ---
 
 ## Recommended workflow
 
 ### When income arrives
+1. Go to **Add Income**
+2. Enter amount — toggle off "Taxable" if it's a reimbursement or gift; enter GST/QST if collected
+3. Choose **AI suggestions** or **Assign manually**
+4. Review, adjust, confirm
 
-1. Open the app
-2. Go to **Add Income**
-3. Enter the amount and source
-4. Review the AI allocation — check that taxes are covered and any urgent categories are funded
-5. Adjust if needed, then confirm
-6. Done — your balances are current
+### When you have existing money to budget
+1. Go to **Accounts**
+2. Hover a cash account row → click the **banknote icon**
+3. Enter the amount, choose AI or manual, confirm
 
 ### When you spend money
+1. Click **Log Expense** from the dashboard
+2. Select category, enter amount and description, confirm
 
-1. Open the app
-2. Click **Log Expense** from the dashboard
-3. Select the category, enter amount and description
-4. Confirm
-
-> Try to log expenses the same day you make them. It takes 15 seconds and keeps your balances accurate.
-
-### Before a significant purchase
-
+### Before a big purchase
 1. Click **Can I afford this?** from the dashboard
-2. Enter the amount and what it's for
-3. Read the AI's verdict
-4. Decide accordingly
+2. Enter amount and description — get an instant AI verdict
 
 ### Once a month
-
-1. Go to **Transactions** and review the month's activity
-2. Export CSV if you need it for bookkeeping or taxes
-3. Check the Goals screen to see if you're on track
-4. Adjust category targets or priorities in Settings if your situation has changed
+1. Go to **Transactions** — review activity, export CSV if needed for bookkeeping
+2. Go to **Analytics** — check your savings rate and where money is going
+3. Go to **Goals** — confirm you're on track
+4. Go to **Accounts** — reconcile balances against your actual bank statements (sliders icon)
 
 ---
 
 ## Frequently asked questions
 
 **Why does the AI always take taxes out first?**
-Because as a freelancer, the money in your bank account is not all yours. A portion belongs to the government. The tax carve-out ensures that money is mentally (and in the app) separated the moment income arrives, so you never accidentally spend it.
+As a freelancer, a portion of every payment belongs to the government. The tax carve-out ensures that money is set aside the moment income arrives. If a payment is non-taxable (a reimbursement, gift, etc.), turn off the Taxable toggle.
 
 **What if I disagree with the AI's allocation?**
-You can edit any amount on the allocation review screen before confirming. The AI's suggestion is a starting point, not a mandate.
+Edit any amount on the review screen before confirming. Or choose "Assign manually" to start from scratch with $0 in every category.
 
 **Can I use this if I have a regular salary?**
-Yes. Just enter your net salary as income each pay period and set your tax carve-out to 0% (since tax is already deducted at source).
+Yes. Enter your net salary as income each pay period and set your tax carve-out to 0% (tax is already deducted at source), or use the Taxable toggle.
 
-**What happens to old transactions if I archive a category?**
-Nothing — they are preserved. The category is hidden from the UI, but all its historical transactions remain in your records and will still appear in the Transactions history.
+**What is the difference between account balance and category balance?**
+The account balance is the real-world number (what your bank says). Category balances are your budget envelopes — how that money is designated. They track in parallel. Logging income updates both (account gets the deposit, categories get funded). Logging a regular expense only updates the category. Logging a debt payment updates both the cash account and the debt account.
 
 **What if a category goes negative?**
-The app allows negative balances. This just means you spent more than you had allocated to that bucket. It's a signal to allocate more to it next time income arrives.
+The app allows negative balances. It means you spent more than you allocated to that bucket — a signal to fund it more on your next income entry.
+
+**What happens to history if I archive a category or account?**
+History is preserved. Archived items are hidden from the UI but all their transactions remain in your records.
 
 **Is my data private?**
-Yes. Every database query is protected by Row Level Security (RLS) — you can only ever see your own data. The AI calls send only your budget numbers (no personal details) to Anthropic's API.
+Yes. All database queries are protected by Row Level Security (RLS) — you only ever see your own data. AI calls send only your budget numbers (no personal details) to Anthropic's API.
 
 **What does the AI cost?**
-Each AI call (allocation or affordability check) costs roughly $0.001–$0.004 CAD. For typical usage (a few income entries and a few affordability checks per month), the total AI cost is under $0.10/month.
+Each AI call costs roughly $0.001–$0.004 CAD. For typical usage (a few income entries and affordability checks per month), total AI cost is under $0.10/month.

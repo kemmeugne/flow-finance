@@ -45,14 +45,16 @@ src/
 ├── app/
 │   ├── (app)/                        # Authenticated route group
 │   │   ├── layout.tsx                # App shell: desktop sidebar + mobile header
-│   │   ├── dashboard/page.tsx        # Dashboard: metrics, category cards, due dates, action buttons
+│   │   ├── dashboard/page.tsx        # Dashboard: metrics, category cards, due dates, action buttons, net worth widget
+│   │   ├── accounts/page.tsx         # Full account CRUD, net worth summary, reconcile dialog, assign-funds trigger
 │   │   ├── categories/page.tsx       # Full category CRUD with dialog + archive
-│   │   ├── income/page.tsx           # 3-step income entry: form → AI allocation review → confirm
+│   │   ├── income/page.tsx           # 3-step income entry: form → AI/manual allocation review → confirm
 │   │   ├── goals/page.tsx            # Goals progress: bars, monthly needed, completion state
-│   │   ├── transactions/page.tsx     # Transaction history: month picker, income/expense/net, CSV export
+│   │   ├── transactions/page.tsx     # Transaction history: month picker, account filter, income/expense/net, CSV export
+│   │   ├── analytics/page.tsx        # Spending analytics: period selector, bar chart, group breakdown, top categories
 │   │   └── settings/page.tsx         # Tax carve-out % slider + currency picker
 │   ├── api/
-│   │   ├── allocate/route.ts         # POST: Claude Haiku allocates income across categories
+│   │   ├── allocate/route.ts         # POST: Claude Haiku allocates income across categories; accepts taxable flag
 │   │   └── afford/route.ts           # POST: Claude Haiku checks if a purchase is affordable
 │   ├── auth/callback/route.ts        # Confirms email, signs out, redirects to ?next= param
 │   ├── login/page.tsx                # Split-screen login
@@ -60,21 +62,23 @@ src/
 │   ├── globals.css                   # Tailwind theme + sage color scale (@theme inline)
 │   ├── layout.tsx                    # Root layout (Geist font)
 │   ├── welcome/page.tsx              # Post-confirmation page (unauthenticated, prompts sign in)
-   └── page.tsx                      # Redirects → /dashboard
+│   └── page.tsx                      # Redirects → /dashboard
 ├── components/
 │   ├── layout/
-│   │   ├── app-sidebar.tsx           # Dark sage sidebar (Dashboard, Categories, Add Income, Goals, Transactions)
+│   │   ├── app-sidebar.tsx           # Dark sage sidebar (Dashboard, Accounts, Categories, Add Income, Goals, Transactions, Analytics)
 │   │   ├── mobile-header.tsx         # Mobile hamburger + Sheet drawer
-│   │   ├── log-expense-button.tsx    # Sheet: log expense → deducts from category balance
+│   │   ├── log-expense-button.tsx    # Sheet: log expense → deducts from category balance; detects payment categories
+│   │   ├── assign-funds-sheet.tsx    # Sheet: assign existing cash account money to categories (manual or AI)
 │   │   └── afford-button.tsx         # Sheet: ask Claude if a purchase is affordable
 │   └── ui/                           # shadcn/ui components (button, dialog, sheet, etc.)
 ├── lib/
-│   ├── finance.ts                    # formatCurrency, urgencyScore, computeAllocations
+│   ├── finance.ts                    # formatCurrency, urgencyScore, computeAllocations (2-decimal precision throughout)
 │   ├── group-config.ts               # Per-group colors, labels, badge styles (GROUP_CONFIG, GROUP_ORDER)
+│   ├── account-config.ts             # Account types/groups, helpers: isDebtAccount, isCashAccount, getAccountGroup, balanceLabel
 │   ├── supabase/
 │   │   ├── client.ts                 # createBrowserClient for client components
 │   │   ├── server.ts                 # createServerClient with cookie store for server components
-│   │   └── types.ts                  # TypeScript interfaces: Category, IncomeEvent, Allocation, Transaction, UserSettings
+│   │   └── types.ts                  # TypeScript interfaces: Category, IncomeEvent, Allocation, Transaction, UserSettings, Account, AccountTransfer
 │   └── utils.ts                      # shadcn cn() utility
 ├── hooks/
 │   └── use-mobile.ts                 # Mobile breakpoint hook
@@ -82,6 +86,7 @@ src/
 
 supabase/
 ├── schema.sql                        # Full DB schema — run this in Supabase SQL Editor
+├── migration-accounts.sql            # Adds accounts + account_transfers tables; adds account_id to income_events + transactions
 └── email-confirm-signup.html         # Branded confirmation email template (paste into Supabase)
 ```
 
@@ -93,8 +98,26 @@ supabase/
 - 4 metric cards: total funded, overall %, category count, underfunded count
 - Underfunded alert banner: categories below 50% sorted by urgency score
 - **Upcoming Due Dates**: categories due in the next 45 days with progress bars and days remaining (urgent ≤7 days highlighted in rose)
+- **Net worth widget**: 3 cards (Net Worth, Assets, Liabilities) shown when accounts exist; setup prompt with link to /accounts if not
 - Header action buttons: **Add Income**, **Log Expense**, **Can I afford this?**
 - Category group cards with colored left border, progress bars, priority badge, due-soon badge (≤14 days)
+
+### Accounts (`/accounts`)
+- Full CRUD for 15 account types across 4 groups: Cash (checking/savings/cash), Credit (credit card/LOC), Loans (mortgage/auto/student/personal/medical/other), Investments (TFSA/FHSA/RRSP/RDSP/other)
+- Net worth summary: Assets, Liabilities, Net Worth
+- Credit usage bar (color-coded: green/amber/rose by utilisation %)
+- Contribution room bar + ytd tracking for registered accounts (TFSA/FHSA/RRSP/RDSP)
+- Interest rate badge on debt accounts
+- **Auto-creates payment category** (`{name} Payment`, bills group, priority 2) when a debt account is added
+- Row actions: **Assign funds** (banknote icon, cash accounts only), **Adjust balance** (reconcile), **Edit**, **Archive**
+- Archive confirmation dialog; type cannot be changed after creation
+
+### Assign Funds (sheet drawer, from Accounts)
+- Triggered from the banknote icon on any cash account row
+- Amount pre-filled with account balance (editable)
+- Two paths: **Manual** (all categories shown at $0, user fills freely) or **AI suggestions** (calls `/api/allocate` with `taxable: false`)
+- Same allocation review UI as income: grouped categories, editable amounts, progress bar, over/under indicator
+- On confirm: only category balances are updated — account balance unchanged (money already there), no income_event created (keeps analytics clean)
 
 ### Categories (`/categories`)
 - Full CRUD: add, edit, archive (soft-delete: `is_active = false` preserves history)
@@ -103,9 +126,9 @@ supabase/
 
 ### Add Income (`/income`)
 Three-step flow:
-1. Enter amount and source
-2. **AI allocation review** — Claude Haiku suggests how to split across categories with per-category reasoning and an overall strategy summary. Falls back to `computeAllocations()` if API unavailable. Amounts are editable.
-3. Confirm → writes `income_events` + `allocations` rows, updates all `categories.current_balance`
+1. **Income form** — amount, **taxable toggle** (default on; when off, tax carve-out = 0%), GST/QST inputs (deducted to compute net income), destination account, source, date, notes. Two buttons: **Assign manually** and **AI suggestions**
+2. **Allocation review** — shows badge for source (AI / algorithm / manual). Manual mode: all active categories at $0, user fills freely. AI mode: Claude Haiku suggestions with per-category reasoning. Amounts editable; over/under indicator + progress bar. Non-taxable badge shown in header if taxable toggle is off.
+3. **Confirm** → writes `income_events` + `allocations` + `transactions` rows, updates all `categories.current_balance`, optionally updates account balance if destination account selected
 
 ### Goals (`/goals`)
 - Cards for all "Goals" group categories
@@ -116,10 +139,19 @@ Three-step flow:
 
 ### Transactions (`/transactions`)
 - Month picker (← →), defaults to current month
-- Summary cards: income received / spent / net
-- Income events listed separately (green)
-- Expenses grouped by date (newest first)
-- **Export CSV** button: downloads `flow-finance-YYYY-MM.csv` with Date, Type, Description, Category, Amount columns
+- **Account filter dropdown** — filters both income and expense rows by linked account
+- Summary cards: income received / spent / net (updated by filter)
+- Income events listed with account badge when linked to an account
+- Expenses grouped by date (newest first), account badge shown under description
+- **Export CSV** button: downloads `flow-finance-YYYY-MM.csv` with Date, Type, Description, Category, Account, Amount columns
+
+### Analytics (`/analytics`)
+- **Period selector**: 3M / 6M / 12M toggle
+- **4 summary cards**: Income, Spent, Saved, Savings Rate (color-coded: ≥20% emerald, ≥10% amber, else rose)
+- **Monthly bar chart**: CSS vertical bars, income (emerald) vs spending (rose) side by side per month; best income/highest spending month summary
+- **Spending by group**: horizontal progress bars with group colors, % of spending
+- **Top 8 categories**: ranked list with colored bars
+- No external charting library — pure CSS
 
 ### Settings (`/settings`)
 - **Tax carve-out %**: range slider + number input (5–50%), live example ("on $5,000 income, $X goes to taxes")
@@ -129,8 +161,9 @@ Three-step flow:
 ### Log Expense (sheet drawer)
 - Triggered from dashboard header
 - Select category (grouped by type, shows available balance)
+- **Payment category detection**: if the selected category is linked to a debt account, shows a banner, auto-selects first checking account as "Pay from", and on confirm: reduces debt account balance + reduces cash account balance + creates `account_transfers` record
 - Live balance preview: current → after deduction (red if overdraft)
-- Creates negative `transactions` row, decrements `categories.current_balance`
+- Button label changes to "Record payment" for payment categories
 
 ### Can I Afford This? (sheet drawer)
 - Triggered from dashboard header
@@ -143,7 +176,7 @@ Three-step flow:
 ## AI routes
 
 ### `POST /api/allocate`
-Fetches user's active categories + settings, calls Claude Haiku with `tool_choice: { type: 'tool', name: 'allocate_income' }` to force structured JSON. Returns `{ suggestions, categories, source, summary }` where `source` is `'ai'` or `'algorithm'`.
+Accepts `{ income, taxable? }`. If `taxable` is false (or omitted and income is a budget assignment), sets `taxCarveout = 0`. Fetches user's active categories + settings, calls Claude Haiku with `tool_choice: { type: 'tool', name: 'allocate_income' }` to force structured JSON. Post-processes: scales amounts proportionally if total overshoots income, then corrects cent-level drift on the first item. Returns `{ suggestions, categories, source, summary }` where `source` is `'ai'` or `'algorithm'`.
 
 ### `POST /api/afford`
 Fetches categories, calls Claude Haiku with `tool_choice: { type: 'tool', name: 'afford_check' }`. Returns `{ verdict, headline, reasoning, suggested_category, balance_after }`. Falls back to a simple lifestyle/living balance check if no API key.
@@ -207,6 +240,22 @@ Both routes use **forced `tool_use`** to guarantee structured JSON output — no
 **`transactions`** — individual debits/credits from categories
 - `amount`: positive = funded (from allocation), negative = spent (from expense log)
 - Links to `allocation_id` when created from an income event
+
+**`accounts`** — financial accounts
+- `type`: one of 15 AccountType values (checking/savings/cash/credit_card/line_of_credit/mortgage/auto_loan/student_loan/personal_loan/medical_debt/other_debt/tfsa/fhsa/rrsp/rdsp/investment_other)
+- `balance`: positive = you have (cash/investments) OR you owe (debts)
+- `credit_limit`, `interest_rate`: nullable, for credit/loan accounts
+- `contribution_room`, `yearly_contribution_limit`, `contributions_ytd`: nullable, for registered investment accounts
+- `payment_category_id`: FK to categories — auto-created when a debt account is added; used by log-expense to detect payment flow
+- `is_active`: false = archived
+
+**`account_transfers`** — debt payment history
+- Created when an expense is logged against a payment category with a "Pay from" cash account
+- Links `from_account_id` (cash) → `to_account_id` (debt), with `transaction_id` FK
+
+**`income_events`** — each time money comes in (also has `account_id` column added by migration)
+
+**`transactions`** — also has `account_id` column added by migration
 
 **`user_settings`**
 - `tax_carveout_percent`: default 27%
