@@ -58,6 +58,24 @@ export function urgencyScore(cat: Category): number {
   return priorityWeight * (1 - fundedRatio) * (1 / Math.max(1, daysUntilDue / 30)) * deficit
 }
 
+export function getSkipReason(cat: Category): string {
+  if (cat.target_amount <= 0) return 'No target amount set'
+  const deficit = cat.target_amount - cat.current_balance
+  if (deficit <= 0) return 'Already fully funded'
+  const pct = Math.round((cat.current_balance / cat.target_amount) * 100)
+  if (pct >= 90) return `${pct}% funded — nearly ready to pay`
+  const days = Math.round(effectiveDaysUntilDue(cat))
+  if (cat.due_frequency === 'annual' && days > 200) {
+    return `Annual · ${Math.round(days / 30)} months until due — low urgency this cycle`
+  }
+  if (cat.due_frequency === 'quarterly' && days > 60) {
+    return `Quarterly · ${Math.round(days / 7)} weeks until due`
+  }
+  if (days > 180) return `${Math.round(days / 30)} months until due — lower urgency`
+  if (cat.priority >= 4) return `P${cat.priority} priority — lower than funded categories`
+  return 'Lower urgency than categories funded this round'
+}
+
 export interface AllocationSuggestion {
   category_id: string
   amount: number

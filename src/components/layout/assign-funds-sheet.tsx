@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, Calculator, PencilLine } from 'lucide-react'
+import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, Calculator, PencilLine, ChevronDown } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency } from '@/lib/finance'
+import { formatCurrency, getSkipReason } from '@/lib/finance'
 import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
 import type { AllocationSuggestion } from '@/lib/finance'
 import type { Category, CategoryGroup, Account } from '@/lib/supabase/types'
@@ -36,12 +36,14 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
   const [allocationSource, setAllocationSource] = useState<'ai' | 'algorithm' | 'manual'>('algorithm')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showAnalysis, setShowAnalysis] = useState(false)
 
   function handleOpenChange(v: boolean) {
     if (v && account) {
       setAmount(String(account.balance))
       setStep('amount')
       setRows([])
+      setShowAnalysis(false)
     }
     onOpenChange(v)
   }
@@ -165,6 +167,10 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
   }
 
   const funded = rows.filter(r => r.confirmed > 0).length
+  const fundedIds = new Set(rows.map(r => r.category_id))
+  const skippedCats = allocationSource !== 'manual'
+    ? Array.from(categoryMap.values()).filter(c => !fundedIds.has(c.id) && c.target_amount > 0)
+    : []
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
@@ -257,6 +263,35 @@ export function AssignFundsSheet({ account, open, onOpenChange, onDone }: Props)
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted border border-border mb-4 text-xs text-muted-foreground shrink-0">
                 <Calculator className="w-3.5 h-3.5 shrink-0" />
                 Built-in algorithm
+              </div>
+            )}
+
+            {/* Skipped categories analysis */}
+            {skippedCats.length > 0 && (
+              <div className="mb-4 shrink-0">
+                <button
+                  onClick={() => setShowAnalysis(v => !v)}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showAnalysis ? 'rotate-180' : ''}`} />
+                  {skippedCats.length} {skippedCats.length === 1 ? 'category' : 'categories'} not funded this round
+                </button>
+                {showAnalysis && (
+                  <div className="mt-2 rounded-xl border border-border overflow-hidden">
+                    {skippedCats.map((cat, idx) => (
+                      <div
+                        key={cat.id}
+                        className={`flex items-start gap-3 px-4 py-3 bg-muted/30 ${idx < skippedCats.length - 1 ? 'border-b border-border' : ''}`}
+                      >
+                        <span className="text-muted-foreground text-sm shrink-0 mt-0.5">—</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">{cat.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{getSkipReason(cat)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

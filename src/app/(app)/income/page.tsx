@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, Calculator, PencilLine } from 'lucide-react'
+import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, Calculator, PencilLine, ChevronDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency } from '@/lib/finance'
+import { formatCurrency, effectiveDaysUntilDue, getSkipReason } from '@/lib/finance'
 import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
 import type { AllocationSuggestion } from '@/lib/finance'
 import type { Category, CategoryGroup, Account } from '@/lib/supabase/types'
@@ -68,6 +68,7 @@ export default function IncomePage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedSource, setSavedSource] = useState('')
+  const [showAnalysis, setShowAnalysis] = useState(false)
 
   function setField<K extends keyof IncomeForm>(key: K, value: string) {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -458,6 +459,11 @@ export default function IncomePage() {
       return acc
     }, {} as Record<string, AllocationRow[]>)
 
+    const fundedIds = new Set(rows.map(r => r.category_id))
+    const skippedCats = allocationSource !== 'manual'
+      ? Array.from(categoryMap.values()).filter(c => !fundedIds.has(c.id) && c.target_amount > 0)
+      : []
+
     return (
       <div className="max-w-2xl mx-auto pb-36">
 
@@ -509,6 +515,35 @@ export default function IncomePage() {
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted border border-border mb-6 text-xs text-muted-foreground">
             <Calculator className="w-3.5 h-3.5 shrink-0" />
             Calculated by built-in algorithm — add <code className="font-mono bg-background px-1 rounded">ANTHROPIC_API_KEY</code> to Vercel for AI suggestions
+          </div>
+        )}
+
+        {/* Skipped categories analysis */}
+        {skippedCats.length > 0 && (
+          <div className="mb-6">
+            <button
+              onClick={() => setShowAnalysis(v => !v)}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showAnalysis ? 'rotate-180' : ''}`} />
+              {skippedCats.length} {skippedCats.length === 1 ? 'category' : 'categories'} not funded this round
+            </button>
+            {showAnalysis && (
+              <div className="mt-2 rounded-xl border border-border overflow-hidden">
+                {skippedCats.map((cat, idx) => (
+                  <div
+                    key={cat.id}
+                    className={`flex items-start gap-3 px-4 py-3 bg-muted/30 ${idx < skippedCats.length - 1 ? 'border-b border-border' : ''}`}
+                  >
+                    <span className="text-muted-foreground text-sm shrink-0 mt-0.5">—</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">{cat.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{getSkipReason(cat)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
