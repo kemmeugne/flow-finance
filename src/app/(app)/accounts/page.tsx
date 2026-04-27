@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Pencil, Trash2, AlertTriangle, Wallet, SlidersHorizontal } from 'lucide-react'
+import { Plus, Pencil, Trash2, AlertTriangle, Wallet, SlidersHorizontal, Banknote } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { createClient } from '@/lib/supabase/client'
@@ -9,8 +9,9 @@ import { formatCurrency } from '@/lib/finance'
 import {
   ACCOUNT_GROUP_CONFIG, ACCOUNT_GROUP_ORDER, ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_TO_GROUP,
   YEARLY_CONTRIBUTION_LIMITS,
-  isDebtAccount, isRegisteredAccount, getAccountGroup, balanceLabel,
+  isDebtAccount, isRegisteredAccount, isCashAccount, getAccountGroup, balanceLabel,
 } from '@/lib/account-config'
+import { AssignFundsSheet } from '@/components/layout/assign-funds-sheet'
 import type { Account } from '@/lib/supabase/types'
 import type { AccountType, AccountGroup } from '@/lib/account-config'
 
@@ -40,6 +41,7 @@ export default function AccountsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Account | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<Account | null>(null)
+  const [assignTarget, setAssignTarget] = useState<Account | null>(null)
   const [reconcileTarget, setReconcileTarget] = useState<Account | null>(null)
   const [reconcileActual, setReconcileActual] = useState<string>('')
   const [reconciling, setReconciling] = useState(false)
@@ -356,6 +358,15 @@ export default function AccountsPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 md:opacity-100 transition-opacity shrink-0">
+                      {isCashAccount(account.type) && (
+                        <button
+                          onClick={() => setAssignTarget(account)}
+                          title="Assign to categories"
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
+                          <Banknote className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => { setReconcileTarget(account); setReconcileActual(String(account.balance)) }}
                         title="Adjust balance"
@@ -621,6 +632,14 @@ export default function AccountsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Assign funds sheet */}
+      <AssignFundsSheet
+        account={assignTarget}
+        open={!!assignTarget}
+        onOpenChange={v => { if (!v) setAssignTarget(null) }}
+        onDone={load}
+      />
 
       {/* Reconcile / Adjust Balance Dialog */}
       <Dialog open={!!reconcileTarget} onOpenChange={v => { if (!v) { setReconcileTarget(null); setReconcileActual('') } }}>
