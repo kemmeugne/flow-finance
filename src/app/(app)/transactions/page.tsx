@@ -1,15 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/finance'
-import { Receipt, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Download } from 'lucide-react'
+import { Receipt, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
 type TxRow = {
   id: string
   amount: number
   description: string
   date: string
+  category_id: string | null
   account_id: string | null
   categories: { name: string; group_name: string } | null
   accounts: { name: string } | null
@@ -26,6 +28,10 @@ type IncomeRow = {
 
 type AccountOption = { id: string; name: string }
 
+type DeleteTarget =
+  | { type: 'tx'; row: TxRow }
+  | { type: 'income'; row: IncomeRow }
+
 function formatDate(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-CA', {
     weekday: 'short', month: 'short', day: 'numeric',
@@ -41,8 +47,9 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true)
   const [accountFilter, setAccountFilter] = useState<string>('')
   const [accountOptions, setAccountOptions] = useState<AccountOption[]>([])
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  // Load accounts once for the filter dropdown
   useEffect(() => {
     async function loadAccounts() {
       const supabase = createClient()
@@ -56,40 +63,133 @@ export default function TransactionsPage() {
     loadAccounts()
   }, [])
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true)
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
 
-      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
-      const lastDay = new Date(year, month + 1, 0).getDate()
-      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-      const [txResult, incomeResult] = await Promise.all([
-        supabase
-          .from('transactions')
-          .select('id, amount, description, date, account_id, categories(name, group_name), accounts(name)')
-          .eq('user_id', user.id)
-          .gte('date', startDate)
-          .lte('date', endDate)
-          .order('date', { ascending: false }),
-        supabase
-          .from('income_events')
-          .select('id, amount, source, received_at, account_id, accounts(name)')
-          .eq('user_id', user.id)
-          .gte('received_at', startDate)
-          .lte('received_at', endDate + 'T23:59:59')
-          .order('received_at', { ascending: false }),
-      ])
+    const [txResult, incomeResult] = await Promise.all([
+      supabase
+        .from('transactions')
+        .select('id, amount, description, date, category_id, account_id, categories(name, group_name), accounts(name)')
+        .eq('user_id', user.id)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .lt('amount', 0)
+        .order('date', { ascending: false }),
+      supabase
+        .from('income_events')
+        .select('id, amount, source, received_at, account_id, accounts(name)')
+        .eq('user_id', user.id)
+        .gte('received_at', startDate)
+        .lte('received_at', endDate + 'T23:59:59')
+        .order('received_at', { ascending: false }),
+    ])
 
-      setTransactions((txResult.data ?? []) as unknown as TxRow[])
-      setIncome((incomeResult.data ?? []) as unknown as IncomeRow[])
-      setLoading(false)
-    }
-    fetchData()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTransactions((txResult.data ?? []) as unknown as TxRow[])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIncome((incomeResult.data ?? []) as unknown as IncomeRow[])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(false)
   }, [year, month])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+
+    const supabase = createClient()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any
+
+    if (deleteTarget.type === 'tx') {
+      const tx = deleteTarget.row
+      // tx.amount is negative for expenses; reversing means subtracting it (adding the absolute value)
+
+      // 1. Restore category balance
+      if (tx.category_id) {
+        const { data: cat } = await supabase.from('categories').select('current_balance').eq('id', tx.category_id).maybeSingle()
+        if (cat) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await db.from('categories').update({ current_balance: (cat as any).current_balance - tx.amount }).eq('id', tx.category_id)
+        }
+      }
+
+      // 2. Restore cash account balance
+      if (tx.account_id) {
+        const { data: acct } = await supabase.from('accounts').select('balance').eq('id', tx.account_id).maybeSingle()
+        if (acct) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await db.from('accounts').update({ balance: (acct as any).balance - tx.amount }).eq('id', tx.account_id)
+        }
+      }
+
+      // 3. If debt payment: restore debt account + delete transfer record
+      const { data: transfer } = await supabase.from('account_transfers').select('to_account_id, amount').eq('transaction_id', tx.id).maybeSingle()
+      if (transfer) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const t = transfer as any
+        const { data: debtAcct } = await supabase.from('accounts').select('balance').eq('id', t.to_account_id).maybeSingle()
+        if (debtAcct) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await db.from('accounts').update({ balance: (debtAcct as any).balance + t.amount }).eq('id', t.to_account_id)
+        }
+        await db.from('account_transfers').delete().eq('transaction_id', tx.id)
+      }
+
+      await db.from('transactions').delete().eq('id', tx.id)
+
+    } else {
+      const ev = deleteTarget.row
+
+      // 1. Find all allocations for this income event
+      const { data: allocations } = await supabase
+        .from('allocations')
+        .select('id, category_id, confirmed_amount')
+        .eq('income_event_id', ev.id)
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allocs = (allocations ?? []) as any[]
+
+      // 2. Reverse each category balance
+      for (const alloc of allocs) {
+        const { data: cat } = await supabase.from('categories').select('current_balance').eq('id', alloc.category_id).maybeSingle()
+        if (cat) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await db.from('categories').update({ current_balance: (cat as any).current_balance - alloc.confirmed_amount }).eq('id', alloc.category_id)
+        }
+      }
+
+      // 3. Delete allocation transactions, then allocations
+      if (allocs.length > 0) {
+        const allocIds = allocs.map((a: { id: string }) => a.id)
+        await db.from('transactions').delete().in('allocation_id', allocIds)
+        await db.from('allocations').delete().eq('income_event_id', ev.id)
+      }
+
+      // 4. Restore account balance if linked
+      if (ev.account_id) {
+        const { data: acct } = await supabase.from('accounts').select('balance').eq('id', ev.account_id).maybeSingle()
+        if (acct) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await db.from('accounts').update({ balance: (acct as any).balance - ev.amount }).eq('id', ev.account_id)
+        }
+      }
+
+      await db.from('income_events').delete().eq('id', ev.id)
+    }
+
+    setDeleting(false)
+    setDeleteTarget(null)
+    fetchData()
+  }
 
   function prevMonth() {
     if (month === 0) { setMonth(11); setYear(y => y - 1) }
@@ -104,7 +204,6 @@ export default function TransactionsPage() {
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
   const monthLabel = new Date(year, month).toLocaleDateString('en-CA', { month: 'long', year: 'numeric' })
 
-  // Apply account filter
   const filteredTransactions = accountFilter
     ? transactions.filter(t => t.account_id === accountFilter)
     : transactions
@@ -112,7 +211,7 @@ export default function TransactionsPage() {
     ? income.filter(ev => ev.account_id === accountFilter)
     : income
 
-  const totalExpenses = filteredTransactions.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0)
+  const totalExpenses = filteredTransactions.reduce((s, t) => s + Math.abs(t.amount), 0)
   const totalIncome = filteredIncome.reduce((s, i) => s + i.amount, 0)
   const net = totalIncome - totalExpenses
 
@@ -138,13 +237,18 @@ export default function TransactionsPage() {
     URL.revokeObjectURL(url)
   }
 
-  // Group expenses by date
   const byDate: Record<string, TxRow[]> = {}
   for (const tx of filteredTransactions) {
     if (!byDate[tx.date]) byDate[tx.date] = []
     byDate[tx.date].push(tx)
   }
   const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a))
+
+  const deleteLabel = deleteTarget?.type === 'income'
+    ? `income of ${formatCurrency(deleteTarget.row.amount)} from "${deleteTarget.row.source}"`
+    : deleteTarget?.type === 'tx'
+    ? `expense of ${formatCurrency(Math.abs(deleteTarget.row.amount))} — "${deleteTarget.row.description}"`
+    : ''
 
   return (
     <div className="space-y-6">
@@ -169,22 +273,11 @@ export default function TransactionsPage() {
       {/* Month picker + account filter */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <button
-            onClick={prevMonth}
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-            aria-label="Previous month"
-          >
+          <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-muted transition-colors" aria-label="Previous month">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-sm font-semibold text-foreground min-w-[150px] text-center">
-            {monthLabel}
-          </span>
-          <button
-            onClick={nextMonth}
-            disabled={isCurrentMonth}
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Next month"
-          >
+          <span className="text-sm font-semibold text-foreground min-w-[150px] text-center">{monthLabel}</span>
+          <button onClick={nextMonth} disabled={isCurrentMonth} className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed" aria-label="Next month">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
@@ -249,7 +342,7 @@ export default function TransactionsPage() {
                 {filteredIncome.map(ev => (
                   <div
                     key={ev.id}
-                    className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between gap-3"
+                    className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between gap-3 group"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 shrink-0">
@@ -267,9 +360,18 @@ export default function TransactionsPage() {
                         </div>
                       </div>
                     </div>
-                    <span className="text-sm font-semibold text-emerald-600 shrink-0">
-                      +{formatCurrency(ev.amount)}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-semibold text-emerald-600">
+                        +{formatCurrency(ev.amount)}
+                      </span>
+                      <button
+                        onClick={() => setDeleteTarget({ type: 'income', row: ev })}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Delete income entry"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -286,7 +388,7 @@ export default function TransactionsPage() {
                 {byDate[date].map(tx => (
                   <div
                     key={tx.id}
-                    className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between gap-3"
+                    className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between gap-3 group"
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{tx.description}</p>
@@ -299,13 +401,18 @@ export default function TransactionsPage() {
                         )}
                       </div>
                     </div>
-                    <span
-                      className={`text-sm font-semibold shrink-0 ${
-                        tx.amount < 0 ? 'text-rose-600' : 'text-emerald-600'
-                      }`}
-                    >
-                      {tx.amount < 0 ? '-' : '+'}{formatCurrency(Math.abs(tx.amount))}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-sm font-semibold ${tx.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {tx.amount < 0 ? '-' : '+'}{formatCurrency(Math.abs(tx.amount))}
+                      </span>
+                      <button
+                        onClick={() => setDeleteTarget({ type: 'tx', row: tx })}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Delete transaction"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -313,6 +420,30 @@ export default function TransactionsPage() {
           ))}
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete and reverse?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the {deleteLabel} and reverse all associated balance changes
+              {deleteTarget?.type === 'income' ? ', including every category allocation' : ''}.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting ? 'Reversing…' : 'Delete & reverse'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
