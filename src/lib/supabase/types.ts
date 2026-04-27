@@ -84,3 +84,34 @@ export type IncomeEvent = Database['public']['Tables']['income_events']['Row']
 export type Allocation = Database['public']['Tables']['allocations']['Row']
 export type Transaction = Database['public']['Tables']['transactions']['Row']
 export type UserSettings = Database['public']['Tables']['user_settings']['Row']
+
+export interface Account {
+  id: string
+  user_id: string
+  name: string
+  type: string
+  balance: number
+  credit_limit: number | null
+  interest_rate: number | null
+  contribution_room: number | null
+  yearly_contribution_limit: number | null
+  contributions_ytd: number
+  payment_category_id: string | null
+  notes: string | null
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AccountTransfer {
+  id: string
+  user_id: string
+  from_account_id: string
+  to_account_id: string
+  amount: number
+  date: string
+  description: string | null
+  transaction_id: string | null
+  created_at: string
+}

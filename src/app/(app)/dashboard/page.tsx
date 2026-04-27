@@ -1,11 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { AlertTriangle, PlusCircle, TrendingUp, CalendarClock } from 'lucide-react'
+import { AlertTriangle, PlusCircle, TrendingUp, CalendarClock, Wallet } from 'lucide-react'
 import { formatCurrency, urgencyScore } from '@/lib/finance'
 import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
+import { getAccountGroup } from '@/lib/account-config'
 import { LogExpenseButton } from '@/components/layout/log-expense-button'
 import { AffordButton } from '@/components/layout/afford-button'
-import type { Category, CategoryGroup } from '@/lib/supabase/types'
+import type { Category, CategoryGroup, Account } from '@/lib/supabase/types'
 
 function fundedPct(cat: Category) {
   if (cat.target_amount <= 0) return 100
@@ -22,14 +23,21 @@ export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('user_id', user!.id)
-    .eq('is_active', true)
-    .order('sort_order')
+  const [{ data: categories }, { data: accountsData }] = await Promise.all([
+    supabase.from('categories').select('*').eq('user_id', user!.id).eq('is_active', true).order('sort_order'),
+    supabase.from('accounts').select('*').eq('user_id', user!.id).eq('is_active', true),
+  ])
 
   const cats: Category[] = (categories ?? []) as Category[]
+  const accounts: Account[] = (accountsData ?? []) as Account[]
+
+  const cashTotal       = accounts.filter(a => getAccountGroup(a.type) === 'cash').reduce((s, a) => s + a.balance, 0)
+  const investTotal     = accounts.filter(a => getAccountGroup(a.type) === 'investments').reduce((s, a) => s + a.balance, 0)
+  const creditTotal     = accounts.filter(a => getAccountGroup(a.type) === 'credit').reduce((s, a) => s + a.balance, 0)
+  const loanTotal       = accounts.filter(a => getAccountGroup(a.type) === 'loans').reduce((s, a) => s + a.balance, 0)
+  const totalAssets     = cashTotal + investTotal
+  const totalLiabilities = creditTotal + loanTotal
+  const netWorth        = totalAssets - totalLiabilities
 
   const totalBalance    = cats.reduce((s, c) => s + c.current_balance, 0)
   const totalTarget     = cats.reduce((s, c) => s + c.target_amount, 0)
@@ -102,6 +110,45 @@ export default async function DashboardPage() {
           accent={underfunded.length === 0 ? 'emerald' : 'rose'}
         />
       </div>
+
+      {/* Net worth widget */}
+      {accounts.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Net Worth</p>
+            <p className={`text-xl font-bold ${netWorth >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {formatCurrency(netWorth)}
+            </p>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Assets</p>
+            <p className="text-xl font-bold text-foreground">{formatCurrency(totalAssets)}</p>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Liabilities</p>
+            <p className="text-xl font-bold text-rose-600">{formatCurrency(totalLiabilities)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Accounts setup prompt */}
+      {accounts.length === 0 && (
+        <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-muted border border-border">
+          <div className="flex items-center gap-3">
+            <Wallet className="w-5 h-5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Track your net worth</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Add your accounts to see a complete financial picture</p>
+            </div>
+          </div>
+          <Link
+            href="/accounts"
+            className="shrink-0 px-3 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+          >
+            Set up accounts
+          </Link>
+        </div>
+      )}
 
       {/* Underfunded alert */}
       {underfunded.length > 0 && (

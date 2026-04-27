@@ -11,12 +11,14 @@ import {
   Settings,
   LogOut,
   Leaf,
+  Wallet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
   { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/accounts',     label: 'Accounts',     icon: Wallet },
   { href: '/categories',   label: 'Categories',   icon: Tags },
   { href: '/income',       label: 'Add Income',   icon: PlusCircle },
   { href: '/goals',        label: 'Goals',        icon: Target },

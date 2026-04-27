@@ -1,18 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, Calculator } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/finance'
 import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
 import type { AllocationSuggestion } from '@/lib/finance'
-import type { Category, CategoryGroup } from '@/lib/supabase/types'
+import type { Category, CategoryGroup, Account } from '@/lib/supabase/types'
 
 type Step = 'form' | 'review' | 'success'
 
 interface IncomeForm {
   amount: string
+  gst: string
+  qst: string
+  account_id: string
   source: string
   received_at: string
   notes: string
@@ -33,10 +36,30 @@ export default function IncomePage() {
   const [step, setStep] = useState<Step>('form')
   const [form, setForm] = useState<IncomeForm>({
     amount: '',
+    gst: '',
+    qst: '',
+    account_id: '',
     source: '',
     received_at: new Date().toISOString().split('T')[0],
     notes: '',
   })
+  const [cashAccounts, setCashAccounts] = useState<Account[]>([])
+
+  useEffect(() => {
+    async function loadAccounts() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('accounts').select('*')
+        .eq('user_id', user.id).eq('is_active', true)
+        .in('type', ['checking', 'savings', 'cash'])
+        .order('sort_order')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCashAccounts((data ?? []) as Account[])
+    }
+    loadAccounts()
+  }, [])
   const [rows, setRows] = useState<AllocationRow[]>([])
   const [categoryMap, setCategoryMap] = useState<Map<string, Category>>(new Map())
   const [aiSummary, setAiSummary] = useState<string | null>(null)
@@ -56,7 +79,7 @@ export default function IncomePage() {
     const res = await fetch('/api/allocate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ income: parseFloat(form.amount) }),
+      body: JSON.stringify({ income: netIncome }),
     })
 
     if (!res.ok) {
@@ -101,7 +124,11 @@ export default function IncomePage() {
     setRows(prev => prev.map(r => r.category_id === category_id ? { ...r, confirmed: value } : r))
   }
 
-  const income = parseFloat(form.amount) || 0
+  const grossAmount = parseFloat(form.amount) || 0
+  const gstAmount = parseFloat(form.gst) || 0
+  const qstAmount = parseFloat(form.qst) || 0
+  const netIncome = Math.max(0, grossAmount - gstAmount - qstAmount)
+  const income = netIncome
   const totalConfirmed = rows.reduce((s, r) => s + r.confirmed, 0)
   const remaining = income - totalConfirmed
   const overAllocated = remaining < -0.5
@@ -116,20 +143,35 @@ export default function IncomePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setSaving(false); return }
 
-    // 1. Insert income event
+    // 1. Insert income event (amount = net after GST/QST)
+    const taxNotes = [
+      gstAmount > 0 ? `GST: ${formatCurrency(gstAmount)}` : null,
+      qstAmount > 0 ? `QST: ${formatCurrency(qstAmount)}` : null,
+    ].filter(Boolean).join(' · ')
+    const combinedNotes = [form.notes.trim(), taxNotes].filter(Boolean).join(' — ')
+
     const { data: event, error: eventErr } = await db
       .from('income_events')
       .insert({
         user_id: user.id,
-        amount: income,
+        amount: netIncome,
         source: form.source.trim(),
         received_at: form.received_at,
-        notes: form.notes.trim() || null,
+        notes: combinedNotes || null,
+        account_id: form.account_id || null,
       })
       .select()
       .single()
 
     if (eventErr || !event) { setSaving(false); return }
+
+    // Update account balance if one was selected
+    if (form.account_id) {
+      const acct = cashAccounts.find(a => a.id === form.account_id)
+      if (acct) {
+        await db.from('accounts').update({ balance: acct.balance + netIncome }).eq('id', form.account_id)
+      }
+    }
 
     // 2. For each non-zero allocation: save + update balance + log transaction
     for (const row of rows.filter(r => r.confirmed > 0)) {
@@ -198,6 +240,91 @@ export default function IncomePage() {
               </div>
             </div>
 
+            {/* GST / QST */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">
+                  GST <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.gst}
+                    onChange={e => setField('gst', e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">
+                  QST <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.qst}
+                    onChange={e => setField('qst', e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Net income breakdown */}
+            {(gstAmount > 0 || qstAmount > 0) && (
+              <div className="rounded-lg bg-muted border border-border px-4 py-3 text-sm space-y-1">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Gross amount</span>
+                  <span>{formatCurrency(grossAmount)}</span>
+                </div>
+                {gstAmount > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>− GST</span>
+                    <span>{formatCurrency(gstAmount)}</span>
+                  </div>
+                )}
+                {qstAmount > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>− QST</span>
+                    <span>{formatCurrency(qstAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-semibold border-t border-border pt-2 mt-1 text-foreground">
+                  <span>Net income (to allocate)</span>
+                  <span>{formatCurrency(netIncome)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Destination account */}
+            {cashAccounts.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">
+                  Destination account <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <select
+                  value={form.account_id}
+                  onChange={e => setField('account_id', e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+                >
+                  <option value="">Not tracked</option>
+                  {cashAccounts.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} — {formatCurrency(a.balance)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Source */}
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-foreground">Source *</label>
@@ -263,7 +390,13 @@ export default function IncomePage() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Review Allocation</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              {formatCurrency(income)} from <strong className="text-foreground">{form.source}</strong>
+              {gstAmount > 0 || qstAmount > 0 ? (
+                <>
+                  <span>{formatCurrency(netIncome)} net</span>
+                  <span className="text-xs"> (gross {formatCurrency(grossAmount)})</span>
+                </>
+              ) : formatCurrency(income)}{' '}
+              from <strong className="text-foreground">{form.source}</strong>
               {' · '}{new Date(form.received_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
@@ -439,7 +572,7 @@ export default function IncomePage() {
         <button
           onClick={() => {
             setStep('form')
-            setForm({ amount: '', source: '', received_at: new Date().toISOString().split('T')[0], notes: '' })
+            setForm({ amount: '', gst: '', qst: '', account_id: '', source: '', received_at: new Date().toISOString().split('T')[0], notes: '' })
             setRows([])
           }}
           className="px-5 py-2.5 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
