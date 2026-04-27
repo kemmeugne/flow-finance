@@ -33,7 +33,7 @@ ALLOCATION RULES:
 4. Never allocate more than a category's deficit — it's already funded above that
 5. Categories with imminent due_date have higher urgency — prioritize them
 6. If income exceeds all deficits, route surplus to Emergency Fund or first Goals category
-7. Total allocations must not exceed $${income}
+7. HARD LIMIT: the sum of all allocation amounts must equal exactly $${income} — not a dollar more, not a dollar less. Double-check your math before returning.
 
 TODAY: ${new Date().toISOString().split('T')[0]}
 
@@ -103,7 +103,19 @@ export async function POST(request: Request) {
           allocations: Array<{ category_id: string; amount: number; reasoning: string }>
           summary: string
         }
-        const suggestions = input.allocations.filter(a => a.amount > 0)
+        let suggestions = input.allocations.filter(a => a.amount > 0)
+
+        // Clamp total to income — AI can hallucinate amounts that don't add up
+        const rawTotal = suggestions.reduce((s, a) => s + a.amount, 0)
+        if (rawTotal > income + 0.5) {
+          const scale = income / rawTotal
+          suggestions = suggestions.map(a => ({ ...a, amount: Math.round(a.amount * scale) }))
+          // Fix rounding drift so the total is exact
+          const scaledTotal = suggestions.reduce((s, a) => s + a.amount, 0)
+          const drift = Math.round(income) - scaledTotal
+          if (drift !== 0 && suggestions.length > 0) suggestions[0].amount += drift
+        }
+
         return NextResponse.json({ suggestions, categories: cats, source: 'ai', summary: input.summary })
       }
     } catch (err) {
