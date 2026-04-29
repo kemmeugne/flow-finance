@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, Calculator, PencilLine, ChevronDown } from 'lucide-react'
+import { AllocationChat } from '@/components/layout/allocation-chat'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency, effectiveDaysUntilDue, getSkipReason } from '@/lib/finance'
 import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
@@ -69,8 +70,6 @@ export default function IncomePage() {
   const [saving, setSaving] = useState(false)
   const [savedSource, setSavedSource] = useState('')
   const [showAnalysis, setShowAnalysis] = useState(false)
-  const [debugInfo, setDebugInfo] = useState<{ prompt: string; rawResponse: unknown } | null>(null)
-  const [showDebug, setShowDebug] = useState(false)
 
   function setField<K extends keyof IncomeForm>(key: K, value: string) {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -91,17 +90,15 @@ export default function IncomePage() {
       return
     }
 
-    const { suggestions, categories, source, summary, debug } = await res.json() as {
+    const { suggestions, categories, source, summary } = await res.json() as {
       suggestions: AllocationSuggestion[]
       categories: Category[]
       source: 'ai' | 'algorithm'
       summary: string | null
-      debug: { prompt: string; rawResponse: unknown } | null
     }
 
     setAllocationSource(source)
     setAiSummary(summary)
-    setDebugInfo(debug ?? null)
 
     const map = new Map(categories.map((c: Category) => [c.id, c]))
     setCategoryMap(map)
@@ -554,33 +551,6 @@ export default function IncomePage() {
           </div>
         )}
 
-        {/* Debug panel */}
-        {debugInfo && (
-          <div className="mb-6">
-            <button
-              onClick={() => setShowDebug(v => !v)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-            >
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showDebug ? 'rotate-180' : ''}`} />
-              Debug: AI prompt &amp; raw response
-            </button>
-            {showDebug && (
-              <div className="mt-2 space-y-3">
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Prompt sent to AI</p>
-                  <pre className="text-xs bg-muted border border-border p-3 rounded-lg overflow-auto max-h-72 whitespace-pre-wrap break-words">{debugInfo.prompt}</pre>
-                </div>
-                {!!debugInfo.rawResponse && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Raw AI response</p>
-                    <pre className="text-xs bg-muted border border-border p-3 rounded-lg overflow-auto max-h-72">{JSON.stringify(debugInfo.rawResponse as Record<string, unknown>, null, 2)}</pre>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Rows grouped */}
         <div className="space-y-6">
           {GROUP_ORDER.map(group => {
@@ -654,6 +624,30 @@ export default function IncomePage() {
             )
           })}
         </div>
+
+        {/* AI chat */}
+        {allocationSource === 'ai' && (
+          <div className="mt-6">
+            <AllocationChat
+              income={income}
+              allocations={rows
+                .filter(r => r.confirmed > 0)
+                .map(r => ({
+                  name: r.name,
+                  amount: r.confirmed,
+                  reasoning: r.reasoning,
+                  currentBalance: r.current_balance,
+                  targetAmount: r.target_amount,
+                  group: r.group_name,
+                }))}
+              summary={aiSummary}
+              skippedCategories={skippedCats.map(c => ({
+                name: c.name,
+                skipReason: getSkipReason(c),
+              }))}
+            />
+          </div>
+        )}
 
         {/* Sticky footer */}
         <div className="fixed bottom-0 left-0 right-0 md:left-60 bg-background border-t border-border px-4 py-4 z-10">

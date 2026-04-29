@@ -155,7 +155,6 @@ export async function POST(request: Request) {
           categories: cats,
           source: 'ai',
           summary: input.summary,
-          debug: { prompt, rawResponse: input },
         })
       }
     } catch (err) {
@@ -170,6 +169,5 @@ export async function POST(request: Request) {
     categories: cats,
     source: 'algorithm',
     summary: null,
-    debug: { prompt, rawResponse: null },
   })
 }
