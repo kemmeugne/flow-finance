@@ -100,36 +100,19 @@ export interface AllocationSuggestion {
   reasoning: string
 }
 
+// Allocates `remaining` across `categories` using urgency-weighted scoring.
+// Tax pre-allocations are handled upstream (see /api/allocate) before calling this.
 export function computeAllocations(
-  income: number,
+  remaining: number,
   categories: Category[],
-  taxCarveoutPercent: number
 ): AllocationSuggestion[] {
   const suggestions: AllocationSuggestion[] = []
-  let remaining = income
 
   const active = categories.filter(c => c.is_active && c.target_amount > 0)
 
   const round2 = (n: number) => parseFloat(n.toFixed(2))
 
-  // Step 1: Tax carve-out from tax group
-  const taxCats = active.filter(c => c.group_name === 'taxes')
-  if (taxCats.length > 0) {
-    const taxBudget = income * (taxCarveoutPercent / 100)
-    const taxDeficit = taxCats.reduce((sum, c) => sum + Math.max(0, c.target_amount - c.current_balance), 0)
-    const taxAlloc = Math.min(taxBudget, taxDeficit, remaining)
-    const perTaxCat = taxAlloc / taxCats.length
-
-    for (const cat of taxCats) {
-      const amt = round2(Math.min(perTaxCat, Math.max(0, cat.target_amount - cat.current_balance)))
-      if (amt > 0) {
-        suggestions.push({ category_id: cat.id, amount: amt, reasoning: `${taxCarveoutPercent}% tax carve-out` })
-        remaining = round2(remaining - amt)
-      }
-    }
-  }
-
-  // Step 2: Score and allocate remaining by urgency (uses effectiveDeficit for pre-funding)
+  // Score and allocate by urgency (uses effectiveDeficit for pre-funding)
   const nonTax = active.filter(c => c.group_name !== 'taxes')
   const scored = nonTax
     .map(cat => ({ cat, score: urgencyScore(cat) }))

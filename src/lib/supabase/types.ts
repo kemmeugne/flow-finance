@@ -68,6 +68,8 @@ export interface Database {
           id: string
           user_id: string
           tax_carveout_percent: number
+          federal_tax_percent: number
+          provincial_tax_percent: number
           currency: string
           created_at: string
           updated_at: string

@@ -82,7 +82,7 @@ export default function IncomePage() {
     const res = await fetch('/api/allocate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ income: netIncome, taxable }),
+      body: JSON.stringify({ income: grossAmount, gst: gstAmount, qst: qstAmount, taxable }),
     })
 
     if (!res.ok) {
@@ -124,7 +124,7 @@ export default function IncomePage() {
   }
 
   async function handleManual() {
-    if (netIncome <= 0) return
+    if (grossAmount <= 0) return
     setLoading(true)
 
     const supabase = createClient()
@@ -170,7 +170,8 @@ export default function IncomePage() {
   const gstAmount = parseFloat(form.gst) || 0
   const qstAmount = parseFloat(form.qst) || 0
   const netIncome = Math.max(0, grossAmount - gstAmount - qstAmount)
-  const income = netIncome
+  // Allocation is done on gross — GST/QST and income taxes are pre-allocated to their categories
+  const income = grossAmount
   const totalConfirmed = rows.reduce((s, r) => s + r.confirmed, 0)
   const remaining = income - totalConfirmed
   const overAllocated = remaining < -0.01
@@ -185,21 +186,15 @@ export default function IncomePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setSaving(false); return }
 
-    // 1. Insert income event (amount = net after GST/QST)
-    const taxNotes = [
-      gstAmount > 0 ? `GST: ${formatCurrency(gstAmount)}` : null,
-      qstAmount > 0 ? `QST: ${formatCurrency(qstAmount)}` : null,
-    ].filter(Boolean).join(' · ')
-    const combinedNotes = [form.notes.trim(), taxNotes].filter(Boolean).join(' — ')
-
+    // 1. Insert income event (amount = gross — what actually hit the account)
     const { data: event, error: eventErr } = await db
       .from('income_events')
       .insert({
         user_id: user.id,
-        amount: netIncome,
+        amount: grossAmount,
         source: form.source.trim(),
         received_at: form.received_at,
-        notes: combinedNotes || null,
+        notes: form.notes.trim() || null,
         account_id: form.account_id || null,
       })
       .select()
@@ -207,11 +202,11 @@ export default function IncomePage() {
 
     if (eventErr || !event) { setSaving(false); return }
 
-    // Update account balance if one was selected
+    // Update account balance if one was selected (gross amount hits the account)
     if (form.account_id) {
       const acct = cashAccounts.find(a => a.id === form.account_id)
       if (acct) {
-        await db.from('accounts').update({ balance: acct.balance + netIncome }).eq('id', form.account_id)
+        await db.from('accounts').update({ balance: acct.balance + grossAmount }).eq('id', form.account_id)
       }
     }
 
@@ -432,7 +427,7 @@ export default function IncomePage() {
               <button
                 type="button"
                 onClick={handleManual}
-                disabled={loading || netIncome <= 0}
+                disabled={loading || grossAmount <= 0}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-60"
               >
                 <PencilLine className="w-4 h-4" />
@@ -476,14 +471,13 @@ export default function IncomePage() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Review Allocation</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              {gstAmount > 0 || qstAmount > 0 ? (
-                <>
-                  <span>{formatCurrency(netIncome)} net</span>
-                  <span className="text-xs"> (gross {formatCurrency(grossAmount)})</span>
-                </>
-              ) : formatCurrency(income)}{' '}
-              from <strong className="text-foreground">{form.source}</strong>
+              {formatCurrency(grossAmount)} from <strong className="text-foreground">{form.source}</strong>
               {' · '}{new Date(form.received_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {(gstAmount > 0 || qstAmount > 0) && (
+                <span className="text-xs ml-1">
+                  (net {formatCurrency(netIncome)}{gstAmount > 0 ? ` + GST ${formatCurrency(gstAmount)}` : ''}{qstAmount > 0 ? ` + QST ${formatCurrency(qstAmount)}` : ''})
+                </span>
+              )}
               {!taxable && (
                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
                   Non-taxable
