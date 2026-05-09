@@ -46,15 +46,15 @@ src/
 │   ├── (app)/                        # Authenticated route group
 │   │   ├── layout.tsx                # App shell: desktop sidebar + mobile header
 │   │   ├── dashboard/page.tsx        # Dashboard: metrics, category cards, due dates, action buttons, net worth widget
-│   │   ├── accounts/page.tsx         # Full account CRUD, net worth summary, reconcile dialog, assign-funds trigger
+│   │   ├── accounts/page.tsx         # Full account CRUD, net worth summary, reconcile dialog, transfer dialog, assign-funds trigger
 │   │   ├── categories/page.tsx       # Full category CRUD with dialog + archive
 │   │   ├── income/page.tsx           # 3-step income entry: form → AI/manual allocation review → confirm
 │   │   ├── goals/page.tsx            # Goals progress: bars, monthly needed, completion state
 │   │   ├── transactions/page.tsx     # Transaction history: month picker, account filter, income/expense/net, CSV export
 │   │   ├── analytics/page.tsx        # Spending analytics: period selector, bar chart, group breakdown, top categories
-│   │   └── settings/page.tsx         # Tax carve-out % slider + currency picker
+│   │   └── settings/page.tsx         # Federal + provincial tax % sliders + currency picker
 │   ├── api/
-│   │   ├── allocate/route.ts         # POST: Claude Haiku allocates income across categories; accepts taxable flag
+│   │   ├── allocate/route.ts         # POST: pre-allocates taxes by category name, passes remainder to Claude Haiku
 │   │   └── afford/route.ts           # POST: Claude Haiku checks if a purchase is affordable
 │   ├── auth/callback/route.ts        # Confirms email, signs out, redirects to ?next= param
 │   ├── login/page.tsx                # Split-screen login
@@ -72,7 +72,7 @@ src/
 │   │   └── afford-button.tsx         # Sheet: ask Claude if a purchase is affordable
 │   └── ui/                           # shadcn/ui components (button, dialog, sheet, etc.)
 ├── lib/
-│   ├── finance.ts                    # formatCurrency, urgencyScore, computeAllocations (2-decimal precision throughout)
+│   ├── finance.ts                    # formatCurrency, urgencyScore, computeAllocations (no tax step — handled upstream)
 │   ├── group-config.ts               # Per-group colors, labels, badge styles (GROUP_CONFIG, GROUP_ORDER)
 │   ├── account-config.ts             # Account types/groups, helpers: isDebtAccount, isCashAccount, getAccountGroup, balanceLabel
 │   ├── supabase/
@@ -87,6 +87,7 @@ src/
 supabase/
 ├── schema.sql                        # Full DB schema — run this in Supabase SQL Editor
 ├── migration-accounts.sql            # Adds accounts + account_transfers tables; adds account_id to income_events + transactions
+├── migration-tax-settings.sql        # Adds federal_tax_percent + provincial_tax_percent to user_settings
 └── email-confirm-signup.html         # Branded confirmation email template (paste into Supabase)
 ```
 
@@ -109,11 +110,19 @@ supabase/
 - Contribution room bar + ytd tracking for registered accounts (TFSA/FHSA/RRSP/RDSP)
 - Interest rate badge on debt accounts
 - **Auto-creates payment category** (`{name} Payment`, bills group, priority 2) when a debt account is added
-- Row actions: **Assign funds** (banknote icon, cash accounts only), **Adjust balance** (reconcile), **Edit**, **Archive**
+- Row actions: **Assign funds** (banknote icon, cash/investment accounts), **Adjust balance** (reconcile), **Edit**, **Archive**
 - Archive confirmation dialog; type cannot be changed after creation
+- **Transfer button** in header — opens dialog to move funds between any two accounts; shows live balance preview; records in `account_transfers`
+
+### Account Transfer (dialog, from Accounts header)
+- Pick From and To accounts (any two accounts, mutually exclusive dropdowns)
+- Enter amount, date, optional notes
+- Live preview: shows both account balances after the transfer before confirming
+- On confirm: updates both account balances + inserts `account_transfers` record
+- Debt account logic: transferring to a debt account reduces the owed balance (paying it down)
 
 ### Assign Funds (sheet drawer, from Accounts)
-- Triggered from the banknote icon on any cash account row
+- Triggered from the banknote icon on any cash or investment account row
 - Amount pre-filled with account balance (editable)
 - Two paths: **Manual** (all categories shown at $0, user fills freely) or **AI suggestions** (calls `/api/allocate` with `taxable: false`)
 - Same allocation review UI as income: grouped categories, editable amounts, progress bar, over/under indicator
@@ -126,9 +135,15 @@ supabase/
 
 ### Add Income (`/income`)
 Three-step flow:
-1. **Income form** — amount, **taxable toggle** (default on; when off, tax carve-out = 0%), GST/QST inputs (deducted to compute net income), destination account, source, date, notes. Two buttons: **Assign manually** and **AI suggestions**
-2. **Allocation review** — shows badge for source (AI / algorithm / manual). Manual mode: all active categories at $0, user fills freely. AI mode: Claude Haiku suggestions with per-category reasoning. Amounts editable; over/under indicator + progress bar. Non-taxable badge shown in header if taxable toggle is off.
-3. **Confirm** → writes `income_events` + `allocations` + `transactions` rows, updates all `categories.current_balance`, optionally updates account balance if destination account selected
+1. **Income form** — gross amount, **taxable toggle** (default on; when off, income tax carve-outs = 0%), GST/QST inputs, destination account, source, date, notes. Two buttons: **Assign manually** and **AI suggestions**
+2. **Allocation review** — taxes are pre-allocated before AI sees anything:
+   - **GST/QST** amounts → "GST/QST" category (matched by name in taxes group)
+   - **Federal income tax** (% × net income) → "Federal Income Tax" category
+   - **Provincial income tax** (% × net income) → "Provincial Income Tax" category
+   - **Remainder** → Claude Haiku or algorithm for bills/living/goals/etc.
+   - Income event and account balance record the **gross amount** (what actually hits the account)
+   - Review header shows gross with "(net $X + GST $X + QST $X)" parenthetical when applicable
+3. **Confirm** → writes `income_events` (gross) + `allocations` + `transactions` rows, updates all `categories.current_balance`, optionally updates account balance
 
 ### Goals (`/goals`)
 - Cards for all "Goals" group categories
@@ -154,9 +169,12 @@ Three-step flow:
 - No external charting library — pure CSS
 
 ### Settings (`/settings`)
-- **Tax carve-out %**: range slider + number input (5–50%), live example ("on $5,000 income, $X goes to taxes")
+- **Federal Income Tax %**: range slider 0–40% + number input (default 15%)
+- **Provincial Income Tax %**: range slider 0–25% + number input (default 12%)
+- Live example breakdown: "On $5,000 income → federal $X + provincial $X + available $X"
+- Combined total tax % shown (federal + provincial)
 - Currency picker (CAD / USD / EUR / GBP)
-- Persisted to `user_settings` table
+- Persisted to `user_settings` table (`federal_tax_percent`, `provincial_tax_percent`, `tax_carveout_percent` kept in sync as their sum)
 
 ### Log Expense (sheet drawer)
 - Triggered from dashboard header
@@ -176,7 +194,17 @@ Three-step flow:
 ## AI routes
 
 ### `POST /api/allocate`
-Accepts `{ income, taxable? }`. If `taxable` is false (or omitted and income is a budget assignment), sets `taxCarveout = 0`. Fetches user's active categories + settings, calls Claude Haiku with `tool_choice: { type: 'tool', name: 'allocate_income' }` to force structured JSON. Post-processes: scales amounts proportionally if total overshoots income, then corrects cent-level drift on the first item. Returns `{ suggestions, categories, source, summary }` where `source` is `'ai'` or `'algorithm'`.
+Accepts `{ income, gst?, qst?, taxable? }` where `income` is the **gross** amount.
+
+**Pre-allocation step (before AI):**
+1. Finds "GST/QST" category (taxes group, name contains "gst" or "qst") → allocates `gst + qst`
+2. Finds "Federal Income Tax" category (taxes group, name contains "federal") → allocates `federal_tax_percent % × net income`
+3. Finds "Provincial Income Tax" category (taxes group, name contains "provincial") → allocates `provincial_tax_percent % × net income`
+4. Passes only the **remainder** and **non-pre-allocated categories** to Claude Haiku
+
+Claude Haiku receives `remainingForAI` and only non-tax categories — it never touches taxes. Post-processes AI output: scales proportionally if total overshoots remainder, corrects cent-level drift. Returns `{ suggestions, categories, source, summary }` where suggestions include pre-allocations + AI allocations merged.
+
+If `taxable: false`, income tax carve-outs are skipped (GST/QST still applied if provided).
 
 ### `POST /api/afford`
 Fetches categories, calls Claude Haiku with `tool_choice: { type: 'tool', name: 'afford_check' }`. Returns `{ verdict, headline, reasoning, suggested_category, balance_after }`. Falls back to a simple lifestyle/living balance check if no API key.
@@ -231,7 +259,8 @@ Both routes use **forced `tool_use`** to guarantee structured JSON output — no
 - `is_active`: false = soft-deleted (hidden from UI, history preserved)
 
 **`income_events`** — each time money comes in
-- `amount`, `source`, `received_at`
+- `amount`: **gross** amount (including GST/QST collected — what actually hits the bank account)
+- `source`, `received_at`, `account_id` (nullable FK to accounts)
 
 **`allocations`** — one row per category per income event
 - `suggested_amount`: what the AI proposed
@@ -249,21 +278,25 @@ Both routes use **forced `tool_use`** to guarantee structured JSON output — no
 - `payment_category_id`: FK to categories — auto-created when a debt account is added; used by log-expense to detect payment flow
 - `is_active`: false = archived
 
-**`account_transfers`** — debt payment history
-- Created when an expense is logged against a payment category with a "Pay from" cash account
-- Links `from_account_id` (cash) → `to_account_id` (debt), with `transaction_id` FK
-
-**`income_events`** — each time money comes in (also has `account_id` column added by migration)
-
-**`transactions`** — also has `account_id` column added by migration
+**`account_transfers`** — transfer history between accounts
+- Created by: (1) debt payment via log-expense, (2) manual transfer via Transfer dialog
+- `from_account_id` → `to_account_id`, `amount`, `date`, `description`
+- `transaction_id`: nullable FK (only set for debt payment flow, null for manual transfers)
 
 **`user_settings`**
-- `tax_carveout_percent`: default 27%
+- `federal_tax_percent`: default 15% — carve-out routed to "Federal Income Tax" category
+- `provincial_tax_percent`: default 12% — carve-out routed to "Provincial Income Tax" category
+- `tax_carveout_percent`: kept in sync as `federal + provincial` (legacy field, still written on save)
 - `currency`: default CAD
+
+### Migrations (run in order)
+1. `supabase/schema.sql` — base schema
+2. `supabase/migration-accounts.sql` — adds accounts + account_transfers + account_id columns
+3. `supabase/migration-tax-settings.sql` — adds federal_tax_percent + provincial_tax_percent to user_settings
 
 ### Key DB behaviors
 - RLS enabled on all tables — users only see their own rows
-- `seed_default_categories(user_id)` seeds 24 categories on signup
+- `seed_default_categories(user_id)` seeds 24 categories on signup, including "GST/QST", "Federal Income Tax", "Provincial Income Tax" in the taxes group
 - `handle_new_user()` trigger auto-creates `user_settings` on auth signup
 - `updated_at` auto-maintained via trigger on `categories` and `user_settings`
 
@@ -280,11 +313,23 @@ daysUntilDue   = days until due_date (365 if no due date)
 score = priorityWeight × (1 - fundedRatio) × (1 / max(1, daysUntilDue/30)) × deficit
 ```
 
-### `computeAllocations(income, categories, taxCarveoutPercent)`
-Three-step waterfall (fallback when AI is unavailable):
-1. **Tax carve-out** — reserve `taxCarveoutPercent`% for tax group categories
-2. **Urgency-weighted distribution** — remaining income split proportionally by urgency score
-3. **Surplus routing** — leftover goes to Emergency Fund (or first goal)
+### `computeAllocations(remaining, categories)`
+Two-step waterfall (fallback when AI is unavailable). **Note: tax pre-allocation is done upstream in `/api/allocate` before this is called — this function only handles non-tax categories.**
+1. **Urgency-weighted distribution** — `remaining` split proportionally by urgency score across non-tax categories
+2. **Surplus routing** — leftover goes to Emergency Fund (or first goal)
+
+### Tax pre-allocation (in `/api/allocate`)
+Before calling `computeAllocations` or the AI:
+1. Find "GST/QST" category → allocate collected GST + QST
+2. Find "Federal Income Tax" category → allocate `federal_tax_percent % × net income`
+3. Find "Provincial Income Tax" category → allocate `provincial_tax_percent % × net income`
+4. Subtract total pre-allocated from gross income → `remainingForAI`
+5. Pass `remainingForAI` + non-pre-allocated categories to AI/algorithm
+
+Category matching is by substring of `name` (case-insensitive) within `group_name = 'taxes'`:
+- "gst" or "qst" → GST/QST category
+- "federal" → Federal Income Tax
+- "provincial" → Provincial Income Tax
 
 ---
 
