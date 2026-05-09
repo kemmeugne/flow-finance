@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/finance'
-import { Receipt, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react'
+import { isDebtAccount } from '@/lib/account-config'
+import { Receipt, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Download, Trash2, ArrowRightLeft } from 'lucide-react'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
 type TxRow = {
@@ -26,11 +27,23 @@ type IncomeRow = {
   accounts: { name: string } | null
 }
 
+type TransferRow = {
+  id: string
+  amount: number
+  description: string | null
+  date: string
+  from_account_id: string
+  to_account_id: string
+  from_account: { name: string; type: string } | null
+  to_account: { name: string; type: string } | null
+}
+
 type AccountOption = { id: string; name: string }
 
 type DeleteTarget =
   | { type: 'tx'; row: TxRow }
   | { type: 'income'; row: IncomeRow }
+  | { type: 'transfer'; row: TransferRow }
 
 function formatDate(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-CA', {
@@ -44,6 +57,7 @@ export default function TransactionsPage() {
   const [month, setMonth] = useState(now.getMonth())
   const [transactions, setTransactions] = useState<TxRow[]>([])
   const [income, setIncome] = useState<IncomeRow[]>([])
+  const [transfers, setTransfers] = useState<TransferRow[]>([])
   const [loading, setLoading] = useState(true)
   const [accountFilter, setAccountFilter] = useState<string>('')
   const [accountOptions, setAccountOptions] = useState<AccountOption[]>([])
@@ -73,7 +87,7 @@ export default function TransactionsPage() {
     const lastDay = new Date(year, month + 1, 0).getDate()
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-    const [txResult, incomeResult] = await Promise.all([
+    const [txResult, incomeResult, transferResult] = await Promise.all([
       supabase
         .from('transactions')
         .select('id, amount, description, date, category_id, account_id, categories(name, group_name), accounts(name)')
@@ -89,12 +103,22 @@ export default function TransactionsPage() {
         .gte('received_at', startDate)
         .lte('received_at', endDate + 'T23:59:59')
         .order('received_at', { ascending: false }),
+      supabase
+        .from('account_transfers')
+        .select('id, amount, description, date, from_account_id, to_account_id, from_account:accounts!from_account_id(name, type), to_account:accounts!to_account_id(name, type)')
+        .eq('user_id', user.id)
+        .is('transaction_id', null)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false }),
     ])
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTransactions((txResult.data ?? []) as unknown as TxRow[])
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIncome((incomeResult.data ?? []) as unknown as IncomeRow[])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTransfers((transferResult.data ?? []) as unknown as TransferRow[])
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(false)
   }, [year, month])
@@ -146,7 +170,7 @@ export default function TransactionsPage() {
 
       await db.from('transactions').delete().eq('id', tx.id)
 
-    } else {
+    } else if (deleteTarget.type === 'income') {
       const ev = deleteTarget.row
 
       // 1. Find all allocations for this income event
@@ -186,6 +210,23 @@ export default function TransactionsPage() {
       await db.from('income_events').delete().eq('id', ev.id)
     }
 
+    if (deleteTarget.type === 'transfer') {
+      const tr = deleteTarget.row
+      const fromDelta = tr.from_account && isDebtAccount(tr.from_account.type) ? -tr.amount : tr.amount
+      const toDelta = tr.to_account && isDebtAccount(tr.to_account.type) ? tr.amount : -tr.amount
+
+      const { data: fromAcct } = await supabase.from('accounts').select('balance').eq('id', tr.from_account_id).maybeSingle()
+      const { data: toAcct } = await supabase.from('accounts').select('balance').eq('id', tr.to_account_id).maybeSingle()
+
+      await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fromAcct ? db.from('accounts').update({ balance: (fromAcct as any).balance + fromDelta }).eq('id', tr.from_account_id) : Promise.resolve(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        toAcct   ? db.from('accounts').update({ balance: (toAcct   as any).balance + toDelta   }).eq('id', tr.to_account_id)   : Promise.resolve(),
+      ])
+      await db.from('account_transfers').delete().eq('id', tr.id)
+    }
+
     setDeleting(false)
     setDeleteTarget(null)
     fetchData()
@@ -210,6 +251,9 @@ export default function TransactionsPage() {
   const filteredIncome = accountFilter
     ? income.filter(ev => ev.account_id === accountFilter)
     : income
+  const filteredTransfers = accountFilter
+    ? transfers.filter(tr => tr.from_account_id === accountFilter || tr.to_account_id === accountFilter)
+    : transfers
 
   const totalExpenses = filteredTransactions.reduce((s, t) => s + Math.abs(t.amount), 0)
   const totalIncome = filteredIncome.reduce((s, i) => s + i.amount, 0)
@@ -248,6 +292,8 @@ export default function TransactionsPage() {
     ? `income of ${formatCurrency(deleteTarget.row.amount)} from "${deleteTarget.row.source}"`
     : deleteTarget?.type === 'tx'
     ? `expense of ${formatCurrency(Math.abs(deleteTarget.row.amount))} — "${deleteTarget.row.description}"`
+    : deleteTarget?.type === 'transfer'
+    ? `transfer of ${formatCurrency(deleteTarget.row.amount)} from ${deleteTarget.row.from_account?.name} to ${deleteTarget.row.to_account?.name}`
     : ''
 
   return (
@@ -323,7 +369,7 @@ export default function TransactionsPage() {
       {/* Content */}
       {loading ? (
         <div className="text-center py-16 text-muted-foreground text-sm">Loading…</div>
-      ) : filteredTransactions.length === 0 && filteredIncome.length === 0 ? (
+      ) : filteredTransactions.length === 0 && filteredIncome.length === 0 && filteredTransfers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Receipt className="w-12 h-12 text-muted-foreground/40 mb-4" />
           <h2 className="text-lg font-semibold text-foreground">No activity this month</h2>
@@ -368,6 +414,50 @@ export default function TransactionsPage() {
                         onClick={() => setDeleteTarget({ type: 'income', row: ev })}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
                         title="Delete income entry"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Transfers */}
+          {filteredTransfers.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Transfers</p>
+              <div className="space-y-1.5">
+                {filteredTransfers.map(tr => (
+                  <div
+                    key={tr.id}
+                    className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 shrink-0">
+                        <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {tr.from_account?.name ?? '—'} → {tr.to_account?.name ?? '—'}
+                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs text-muted-foreground">{formatDate(tr.date)}</p>
+                          {tr.description && (
+                            <span className="text-xs text-muted-foreground truncate">{tr.description}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-semibold text-blue-600">
+                        {formatCurrency(tr.amount)}
+                      </span>
+                      <button
+                        onClick={() => setDeleteTarget({ type: 'transfer', row: tr })}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Delete transfer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -428,7 +518,8 @@ export default function TransactionsPage() {
             <AlertDialogTitle>Delete and reverse?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete the {deleteLabel} and reverse all associated balance changes
-              {deleteTarget?.type === 'income' ? ', including every category allocation' : ''}.
+              {deleteTarget?.type === 'income' ? ', including every category allocation' : ''}
+              {deleteTarget?.type === 'transfer' ? ' on both accounts' : ''}.
               This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
