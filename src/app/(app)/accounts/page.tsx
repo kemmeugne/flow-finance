@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Pencil, Trash2, AlertTriangle, Wallet, SlidersHorizontal, Banknote } from 'lucide-react'
+import { Plus, Pencil, Trash2, AlertTriangle, Wallet, SlidersHorizontal, Banknote, ArrowRightLeft } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { createClient } from '@/lib/supabase/client'
@@ -34,6 +34,18 @@ const EMPTY_FORM: AccountForm = {
   yearly_contribution_limit: '', contributions_ytd: '0', notes: '',
 }
 
+interface TransferForm {
+  from_account_id: string
+  to_account_id: string
+  amount: string
+  date: string
+  notes: string
+}
+
+const EMPTY_TRANSFER: TransferForm = {
+  from_account_id: '', to_account_id: '', amount: '', date: new Date().toISOString().split('T')[0], notes: '',
+}
+
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,6 +58,9 @@ export default function AccountsPage() {
   const [reconcileActual, setReconcileActual] = useState<string>('')
   const [reconciling, setReconciling] = useState(false)
   const [form, setForm] = useState<AccountForm>(EMPTY_FORM)
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transferForm, setTransferForm] = useState<TransferForm>(EMPTY_TRANSFER)
+  const [transferring, setTransferring] = useState(false)
 
   const load = useCallback(async () => {
     const supabase = createClient()
@@ -184,6 +199,50 @@ export default function AccountsPage() {
     load()
   }
 
+  function setTransferField<K extends keyof TransferForm>(key: K, value: string) {
+    setTransferForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  async function handleTransfer(e: React.FormEvent) {
+    e.preventDefault()
+    const amount = parseFloat(transferForm.amount)
+    if (!amount || amount <= 0 || !transferForm.from_account_id || !transferForm.to_account_id) return
+    setTransferring(true)
+
+    const supabase = createClient()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setTransferring(false); return }
+
+    const fromAccount = accounts.find(a => a.id === transferForm.from_account_id)
+    const toAccount = accounts.find(a => a.id === transferForm.to_account_id)
+    if (!fromAccount || !toAccount) { setTransferring(false); return }
+
+    // Debt accounts: balance = what you owe. Paying down debt reduces balance.
+    const fromDelta = isDebtAccount(fromAccount.type) ? amount : -amount
+    const toDelta = isDebtAccount(toAccount.type) ? -amount : amount
+
+    await Promise.all([
+      db.from('accounts').update({ balance: fromAccount.balance + fromDelta }).eq('id', fromAccount.id),
+      db.from('accounts').update({ balance: toAccount.balance + toDelta }).eq('id', toAccount.id),
+    ])
+
+    await db.from('account_transfers').insert({
+      user_id: user.id,
+      from_account_id: transferForm.from_account_id,
+      to_account_id: transferForm.to_account_id,
+      amount,
+      date: transferForm.date,
+      description: transferForm.notes.trim() || `Transfer: ${fromAccount.name} → ${toAccount.name}`,
+    })
+
+    setTransferring(false)
+    setTransferOpen(false)
+    setTransferForm(EMPTY_TRANSFER)
+    load()
+  }
+
   // ── Net worth ─────────────────────────────────────────────────────
   const byGroup = ACCOUNT_GROUP_ORDER.reduce<Record<AccountGroup, Account[]>>((acc, g) => {
     acc[g] = accounts.filter(a => getAccountGroup(a.type) === g)
@@ -210,13 +269,22 @@ export default function AccountsPage() {
             {accounts.length} active account{accounts.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Add Account
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setTransferOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <ArrowRightLeft className="w-4 h-4" />
+            Transfer
+          </button>
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Account
+          </button>
+        </div>
       </div>
 
       {/* Loading */}
@@ -693,6 +761,135 @@ export default function AccountsPage() {
                 className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
               >
                 {reconciling ? 'Saving…' : 'Update balance'}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Transfer Dialog ───────────────────────────────────────── */}
+      <Dialog open={transferOpen} onOpenChange={v => { if (!v) { setTransferOpen(false); setTransferForm(EMPTY_TRANSFER) } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Transfer Between Accounts</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleTransfer} className="space-y-4 py-2">
+
+            {/* From */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">From</label>
+              <select
+                value={transferForm.from_account_id}
+                onChange={e => setTransferField('from_account_id', e.target.value)}
+                required
+                className="w-full px-3 py-2 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+              >
+                <option value="">Select account…</option>
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id} disabled={a.id === transferForm.to_account_id}>
+                    {a.name} ({formatCurrency(a.balance)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* To */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">To</label>
+              <select
+                value={transferForm.to_account_id}
+                onChange={e => setTransferField('to_account_id', e.target.value)}
+                required
+                className="w-full px-3 py-2 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+              >
+                <option value="">Select account…</option>
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id} disabled={a.id === transferForm.from_account_id}>
+                    {a.name} ({formatCurrency(a.balance)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Amount */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Amount *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">$</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={transferForm.amount}
+                  onChange={e => setTransferField('amount', e.target.value)}
+                  placeholder="0.00"
+                  required
+                  autoFocus
+                  className="w-full pl-7 pr-3 py-2 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+                />
+              </div>
+            </div>
+
+            {/* Balance preview */}
+            {transferForm.from_account_id && transferForm.to_account_id && parseFloat(transferForm.amount) > 0 && (() => {
+              const amt = parseFloat(transferForm.amount)
+              const from = accounts.find(a => a.id === transferForm.from_account_id)
+              const to = accounts.find(a => a.id === transferForm.to_account_id)
+              if (!from || !to) return null
+              const fromAfter = isDebtAccount(from.type) ? from.balance + amt : from.balance - amt
+              const toAfter = isDebtAccount(to.type) ? to.balance - amt : to.balance + amt
+              return (
+                <div className="rounded-lg bg-muted border border-border px-4 py-3 text-xs space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{from.name} after</span>
+                    <span className={`font-medium ${fromAfter < 0 ? 'text-rose-600' : 'text-foreground'}`}>{formatCurrency(fromAfter)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{to.name} after</span>
+                    <span className="font-medium text-foreground">{formatCurrency(toAfter)}</span>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Date */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Date *</label>
+              <input
+                type="date"
+                value={transferForm.date}
+                onChange={e => setTransferField('date', e.target.value)}
+                required
+                className="w-full px-3 py-2 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Notes <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <input
+                type="text"
+                value={transferForm.notes}
+                onChange={e => setTransferField('notes', e.target.value)}
+                placeholder="e.g. Monthly savings top-up"
+                className="w-full px-3 py-2 rounded-lg border border-sage-200 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <button
+                type="button"
+                onClick={() => { setTransferOpen(false); setTransferForm(EMPTY_TRANSFER) }}
+                className="px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={transferring}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
+              >
+                {transferring ? 'Transferring…' : 'Confirm transfer'}
               </button>
             </DialogFooter>
           </form>
