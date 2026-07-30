@@ -60,7 +60,15 @@ ${context.summary ? `Strategy summary: ${context.summary}` : ''}
 Categories not funded this round:
 ${skippedLines}
 
-Your role: help the user understand your allocation decisions, answer questions about their budget, and suggest adjustments if they want. Be concise, warm, and practical. Explain trade-offs clearly when the user wants to change something. Keep responses under 150 words unless the user asks for a detailed explanation.`
+Your role: help the user understand your allocation decisions, answer questions about their budget, and suggest adjustments if they want. Be concise, warm, and practical. Explain trade-offs clearly when the user wants to change something.
+
+Formatting rules (always follow these):
+- Use **bold** for category names, dollar amounts, and key terms.
+- Use bullet points (- item) when listing multiple categories or trade-offs.
+- Keep paragraphs short — 2-3 sentences max each.
+- Use a short bolded label at the start of a section if covering more than one topic, e.g. **Why skipped:** or **Trade-off:**.
+- Never use headers (##). Never use tables.
+- Keep responses under 120 words unless the user explicitly asks for a detailed explanation.`
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
