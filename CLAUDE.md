@@ -73,8 +73,9 @@ src/
 │   │   └── reset-data-button.tsx     # Dialog: two-step confirmed wipe of all user data + optional reseed
 │   └── ui/                           # shadcn/ui components (button, dialog, sheet, etc.)
 ├── lib/
-│   ├── finance.ts                    # formatCurrency, urgencyScore, computeAllocations (no tax step — handled upstream)
-│   ├── group-config.ts               # Per-group colors, labels, badge styles (GROUP_CONFIG, GROUP_ORDER)
+│   ├── finance.ts                    # formatCurrency, urgencyScore, isTaxCategory, computeAllocations (no tax step — handled upstream)
+│   ├── planning.ts                   # computeAvailableToSpend, computeRunway, monthlyCost — the two-ledger maths
+│   ├── group-config.ts               # Per-LAYER colors, labels, blurbs, spokenFor flag (GROUP_CONFIG, GROUP_ORDER, SPOKEN_FOR_LAYERS)
 │   ├── account-config.ts             # Account types/groups, helpers: isDebtAccount, isCashAccount, getAccountGroup, balanceLabel
 │   ├── supabase/
 │   │   ├── client.ts                 # createBrowserClient for client components
@@ -89,6 +90,7 @@ supabase/
 ├── schema.sql                        # Full DB schema — run this in Supabase SQL Editor
 ├── migration-accounts.sql            # Adds accounts + account_transfers tables; adds account_id to income_events + transactions
 ├── migration-tax-settings.sql        # Adds federal_tax_percent + provincial_tax_percent to user_settings
+├── migration-layers.sql              # Replaces the 6 groups with the 5 money layers (one-way, transactional)
 └── email-confirm-signup.html         # Branded confirmation email template (paste into Supabase)
 ```
 
@@ -101,6 +103,9 @@ supabase/
 - Underfunded alert banner: categories below 50% sorted by urgency score
 - **Upcoming Due Dates**: categories due in the next 45 days with progress bars and days remaining (urgent ≤7 days highlighted in rose)
 - **Net worth widget**: 3 cards (Net Worth, Assets, Liabilities) shown when accounts exist; setup prompt with link to /accounts if not
+- **Actually available** headline card: cash − spoken-for, with a per-layer breakdown, an
+  `unassigned cash` secondary line, and a drift warning when the two ledgers disagree
+- **Runway** card: this month funded %, next month funded %, emergency runway in months
 - Header action buttons: **Add Income**, **Log Expense**, **Can I afford this?**
 - Category group cards with colored left border, progress bars, priority badge, due-soon badge (≤14 days)
 - **Start over (danger zone)** at the bottom: `ResetDataButton` — erases all financial data so the user can rebuild their plan
@@ -215,6 +220,32 @@ Claude Haiku receives `remainingForAI` and only non-tax categories — it never 
 
 If `taxable: false`, income tax carve-outs are skipped (GST/QST still applied if provided).
 
+### Available to Spend (`src/lib/planning.ts`)
+
+The app keeps **two parallel ledgers that nothing reconciles**: `accounts.balance` (what the
+bank holds) and `categories.current_balance` (how that money is designated). Both dashboard
+figures derive one against the other:
+
+```
+cash       = Σ active cash accounts
+assets     = cash + Σ active investment accounts
+spokenFor  = Σ category balances where layer.spokenFor   (everything but operating)
+available  = cash − spokenFor        ← headline
+assigned   = Σ every category balance
+unassigned = assets − assigned       ← secondary line
+drifted    = assigned > assets       ← ledgers disagree, prompt a reconcile
+```
+
+`unassigned` compares against **assets, not cash** — wealth categories are usually already
+sitting in an investment account, so comparing them to cash alone made the drift warning
+fire permanently.
+
+**Runway** (`computeRunway`): `monthlyCost()` amortises each operating category
+(monthly → target, quarterly → ÷3, annual → ÷12; one_time/none → 0). Then
+`monthsCovered = operatingBalance ÷ monthlyNeed`, yielding "this month funded %" (capped 100)
+and "next month funded %" (`monthsCovered − 1`). Emergency runway uses protected categories
+that are *not* tax reserves, matched by `isTaxCategoryName`.
+
 ### `POST /api/afford`
 Fetches categories, calls Claude Haiku with `tool_choice: { type: 'tool', name: 'afford_check' }`. Returns `{ verdict, headline, reasoning, suggested_category, balance_after }`. Falls back to a simple lifestyle/living balance check if no API key.
 
@@ -237,16 +268,20 @@ Both routes use **forced `tool_use`** to guarantee structured JSON output — no
 | `sage-100` | Muted backgrounds |
 | `sage-50` | Page background |
 
-**Category group colors** (`src/lib/group-config.ts`):
+**Money layers** (`src/lib/group-config.ts`) — stored in `categories.group_name`.
+The column keeps its old name so existing rows/queries stay valid; the *values* are layers.
+`GROUP_ORDER` is both the display order and the funding waterfall.
 
-| Group | Accent | Usage |
-|---|---|---|
-| Taxes | Rose | P1 — first allocation |
-| Bills | Blue | P1–P2 fixed obligations |
-| Living | Emerald | Day-to-day expenses |
-| Goals | Violet | Savings targets |
-| Investments | Indigo | Long-term wealth |
-| Lifestyle | Amber | Discretionary spending |
+| # | Layer | Accent | Spoken for? | Holds |
+|---|---|---|---|---|
+| 1 | `protected` | Rose | yes | Income tax, GST/QST, emergency fund |
+| 2 | `operating` | Emerald | **no** | Rent, groceries, bills, lifestyle — this month's living |
+| 3 | `debt` | Slate | yes | Credit card / loan payment categories |
+| 4 | `sinking` | Amber | yes | Dated commitments: gifts, trips, courses, purchases |
+| 5 | `wealth` | Indigo | yes | TFSA, FHSA, RRSP, down payment, retirement |
+
+`spokenFor: false` on `operating` alone — it is the only money you are meant to spend,
+which is what makes "Actually available" computable.
 
 **Layout:** Dark sage sidebar (fixed, desktop) + scrollable content area. Mobile: sidebar collapses to Sheet drawer triggered by hamburger in a fixed dark sage top bar.
 
@@ -302,6 +337,9 @@ Both routes use **forced `tool_use`** to guarantee structured JSON output — no
 1. `supabase/schema.sql` — base schema
 2. `supabase/migration-accounts.sql` — adds accounts + account_transfers + account_id columns
 3. `supabase/migration-tax-settings.sql` — adds federal_tax_percent + provincial_tax_percent to user_settings
+4. `supabase/migration-layers.sql` — **one-way**: remaps `group_name` to the five layers, swaps the CHECK constraint, rewrites `seed_default_categories`
+
+Note: `schema.sql` still declares the OLD six groups. It is the historical baseline; migration 4 replaces them. Do not "fix" it.
 
 ### Key DB behaviors
 - RLS enabled on all tables — users only see their own rows
@@ -310,6 +348,14 @@ Both routes use **forced `tool_use`** to guarantee structured JSON output — no
 - `updated_at` auto-maintained via trigger on `categories` and `user_settings`
 
 ---
+
+## Known correctness fix
+
+Debt payments used to be **double-counted as spending**. `log-expense-button.tsx` writes a
+negative `transactions` row for a payment *and* an `account_transfers` row, while analytics
+counted every negative transaction — so a Visa purchase logged to Groceries was counted again
+when the Visa was paid. Analytics now excludes any transaction whose id appears in
+`account_transfers.transaction_id`. Keep that filter if you touch the analytics query.
 
 ## Allocation logic (`src/lib/finance.ts`)
 
@@ -322,9 +368,15 @@ daysUntilDue   = days until due_date (365 if no due date)
 score = priorityWeight × (1 - fundedRatio) × (1 / max(1, daysUntilDue/30)) × deficit
 ```
 
+### Waterfall
+`GROUP_ORDER` is the funding waterfall and is surfaced in the UI: the income review screen
+numbers each layer "Step 1…5" with its blurb, and `/api/allocate`'s prompt states the same
+order. The maths *within* a step stays urgency-weighted rather than strictly sequential — a
+strict waterfall would starve a near-due annual tax bill behind the current month's expenses.
+
 ### `computeAllocations(remaining, categories)`
 Two-step waterfall (fallback when AI is unavailable). **Note: tax pre-allocation is done upstream in `/api/allocate` before this is called — this function only handles non-tax categories.**
-1. **Urgency-weighted distribution** — `remaining` split proportionally by urgency score across non-tax categories
+1. **Urgency-weighted distribution** — `remaining` split proportionally by urgency score across non-tax categories. Tax reserves are excluded via `isTaxCategory()` (protected layer **and** a tax-shaped name) — filtering the whole `protected` layer would wrongly starve the emergency fund.
 2. **Surplus routing** — leftover goes to Emergency Fund (or first goal)
 
 ### Tax pre-allocation (in `/api/allocate`)
@@ -335,7 +387,7 @@ Before calling `computeAllocations` or the AI:
 4. Subtract total pre-allocated from gross income → `remainingForAI`
 5. Pass `remainingForAI` + non-pre-allocated categories to AI/algorithm
 
-Category matching is by substring of `name` (case-insensitive) within `group_name = 'taxes'`:
+Category matching is by substring of `name` (case-insensitive) within `group_name = 'protected'`:
 - "gst" or "qst" → GST/QST category
 - "federal" → Federal Income Tax
 - "provincial" → Provincial Income Tax

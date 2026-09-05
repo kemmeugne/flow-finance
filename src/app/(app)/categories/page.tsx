@@ -23,7 +23,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: '',
-  group_name: 'bills',
+  group_name: 'operating',
   target_amount: '',
   current_balance: '0',
   priority: '3',

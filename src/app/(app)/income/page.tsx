@@ -547,14 +547,17 @@ export default function IncomePage() {
 
         {/* Rows grouped */}
         <div className="space-y-6">
-          {GROUP_ORDER.map(group => {
+          {GROUP_ORDER.map((group, stepIdx) => {
             const groupRows = byGroup[group as CategoryGroup]
             if (!groupRows?.length) return null
             const cfg = GROUP_CONFIG[group as CategoryGroup]
 
             return (
               <section key={group}>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+                    Step {stepIdx + 1}
+                  </span>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg.badge}`}>
                     {cfg.label}
                   </span>
@@ -562,6 +565,7 @@ export default function IncomePage() {
                     {formatCurrency(groupRows.reduce((s, r) => s + r.confirmed, 0))} allocated
                   </span>
                 </div>
+                <p className="text-xs text-muted-foreground mb-2">{cfg.blurb}</p>
 
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   {groupRows.map((row, idx) => {

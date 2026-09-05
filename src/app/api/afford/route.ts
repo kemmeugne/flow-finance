@@ -107,7 +107,7 @@ Be direct and practical. Name the best category to take the money from.`
 
   // Fallback: basic balance check against lifestyle/living
   const available = cats
-    .filter(c => c.group_name === 'lifestyle' || c.group_name === 'living')
+    .filter(c => c.group_name === 'operating')
     .reduce((s, c) => s + c.current_balance, 0)
 
   const fallback: AffordResult = {

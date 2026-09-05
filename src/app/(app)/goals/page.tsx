@@ -21,7 +21,7 @@ export default async function GoalsPage() {
     .select('*')
     .eq('user_id', user!.id)
     .eq('is_active', true)
-    .eq('group_name', 'goals')
+    .in('group_name', ['sinking', 'wealth'])
     .order('sort_order')
 
   const goals: Category[] = (data ?? []) as Category[]

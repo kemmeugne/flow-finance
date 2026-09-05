@@ -1,4 +1,4 @@
-export type CategoryGroup = 'taxes' | 'bills' | 'living' | 'goals' | 'investments' | 'lifestyle'
+export type CategoryGroup = 'protected' | 'operating' | 'debt' | 'sinking' | 'wealth'
 export type DueFrequency = 'monthly' | 'quarterly' | 'annual' | 'one_time' | 'none'
 
 export interface Database {

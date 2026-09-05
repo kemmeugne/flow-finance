@@ -10,6 +10,24 @@ The core idea is simple: **every time money comes in, you decide exactly where i
 
 ---
 
+## The five money layers
+
+Every category belongs to one of five layers. The layer is what tells the app whether that
+money is yours to spend.
+
+| Layer | What lives here | Yours to spend? |
+| --- | --- | --- |
+| **Protected** | Income tax, GST/QST, emergency fund | No — it is the government's or your safety net |
+| **Operating** | Rent, groceries, bills, lifestyle | **Yes** — this is your living money |
+| **Debt** | Credit card and loan payments | No — it is owed |
+| **Sinking Funds** | Gifts, trips, courses, big purchases with a date | No — promised to a deadline |
+| **Wealth Building** | TFSA, FHSA, RRSP, down payment, retirement | No — promised to your future |
+
+Only **Operating** money is available to spend. That single distinction is what powers the
+"Actually available" number on your dashboard.
+
+---
+
 ## The core concept: budget categories
 
 Everything in Flow Finance revolves around **categories** — named buckets of money, each with a purpose. Think of them like envelopes: when income arrives, you stuff money into the right envelopes. When you spend, you take it out of the right envelope.
@@ -65,6 +83,33 @@ The dashboard is your home screen. It gives you a full picture of your financial
 
 **Net Worth widget**
 If you have accounts set up, three cards show your total Net Worth, Assets (cash + investments), and Liabilities (credit + loans). This updates automatically as you log income, expenses, and debt payments.
+
+**Actually available** (top of the page)
+The most important number in the app. It answers "what can I safely use right now?"
+
+```
+Cash in bank        $40,452
+Spoken for          $36,000   ← protected + debt + sinking + wealth
+──────────────────────────
+Actually available   $4,452
+```
+
+Seeing $33,000 in a savings account feels like $33,000 of spending power, even when $16,000
+belongs to the CRA and $10,000 is your emergency fund. This card removes that illusion. A
+breakdown beside it shows which layers are holding the reserved money.
+
+Underneath, **Unassigned cash** shows money you have not yet given a job to. In a well-run
+month it sits near zero.
+
+If your categories ever claim more than your accounts actually hold, an amber warning appears
+— that means the two have drifted apart and it is time to reconcile an account.
+
+**Runway**
+How many months you are covered for:
+- **This month funded** — your Operating balance against one month of operating costs
+- **Next month funded** — whatever is left over after this month
+- **Emergency runway** — how many months your emergency fund alone would carry you
+  (green at 3+ months, amber at 1–3, red below 1)
 
 **Summary row**
 Four cards showing total funded, overall funded %, category count, and underfunded count.
@@ -327,6 +372,17 @@ Enter an amount and what it's for, then click **Ask Claude**. The AI reads your 
 ---
 
 ## Frequently asked questions
+
+**Why doesn't my savings account count as "available"?**
+Because most of it is already promised. The app subtracts everything in the Protected, Debt,
+Sinking Funds and Wealth layers, and leaves you with Operating money — the money you are
+actually meant to live on this month.
+
+**What order does money get funded in?**
+A waterfall, shown as numbered steps on the income review screen: Protected (1) → Operating
+(2) → Debt (3) → Sinking Funds (4) → Wealth Building (5). Within each step, priority and how
+soon something is due decide what gets funded first — so a tax bill due in three weeks is not
+starved by a step that sits above it.
 
 **Why does the AI always take taxes out first?**
 As a freelancer, a portion of every payment belongs to the government. The tax carve-out ensures that money is set aside the moment income arrives. If a payment is non-taxable (a reimbursement, gift, etc.), turn off the Taxable toggle.

@@ -61,10 +61,10 @@ export default function AnalyticsPage() {
     start.setMonth(start.getMonth() - months + 1)
     const startStr = start.toISOString().split('T')[0]
 
-    const [txResult, incomeResult] = await Promise.all([
+    const [txResult, incomeResult, transferResult] = await Promise.all([
       supabase
         .from('transactions')
-        .select('amount, date, categories(name, group_name)')
+        .select('id, amount, date, categories(name, group_name)')
         .eq('user_id', user.id)
         .gte('date', startStr),
       supabase
@@ -72,14 +72,25 @@ export default function AnalyticsPage() {
         .select('amount, received_at')
         .eq('user_id', user.id)
         .gte('received_at', startStr),
+      supabase
+        .from('account_transfers')
+        .select('transaction_id')
+        .eq('user_id', user.id)
+        .gte('date', startStr),
     ])
 
-    const allTxRows = (txResult.data ?? []) as { amount: number; date: string; categories: { name: string; group_name: string } | null }[]
+    const allTxRows = (txResult.data ?? []) as { id: string; amount: number; date: string; categories: { name: string; group_name: string } | null }[]
     const incomeRows = (incomeResult.data ?? []) as { amount: number; received_at: string }[]
+    const transferRows = (transferResult.data ?? []) as { transaction_id: string | null }[]
 
-    // Split: expenses (amount < 0) vs investment allocations (amount > 0, group = investments)
-    const txRows = allTxRows.filter(t => t.amount < 0)
-    const investmentRows = allTxRows.filter(t => t.amount > 0 && t.categories?.group_name === 'investments')
+    // A debt payment writes BOTH a negative transaction and an account_transfers row.
+    // Counting it as spending double-counts the original purchase, which was already
+    // logged against its own category — so drop those transactions here.
+    const paymentTxIds = new Set(transferRows.map(t => t.transaction_id).filter(Boolean) as string[])
+
+    // Split: expenses (amount < 0) vs wealth allocations (amount > 0, layer = wealth)
+    const txRows = allTxRows.filter(t => t.amount < 0 && !paymentTxIds.has(t.id))
+    const investmentRows = allTxRows.filter(t => t.amount > 0 && t.categories?.group_name === 'wealth')
 
     // ── Monthly buckets ───────────────────────────────────────────
     const monthlyIncome: Record<string, number> = {}

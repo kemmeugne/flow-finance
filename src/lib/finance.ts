@@ -1,4 +1,5 @@
 import type { Category, CategoryGroup } from './supabase/types'
+import { isTaxCategoryName } from './planning'
 
 export function formatCurrency(amount: number, currency = 'CAD'): string {
   return new Intl.NumberFormat('fr-CA', {
@@ -11,12 +12,11 @@ export function formatCurrency(amount: number, currency = 'CAD'): string {
 
 export function groupLabel(group: CategoryGroup): string {
   const labels: Record<CategoryGroup, string> = {
-    taxes:       'Taxes',
-    bills:       'Bills & Obligations',
-    living:      'Living Expenses',
-    goals:       'Goals',
-    investments: 'Investments',
-    lifestyle:   'Lifestyle',
+    protected: 'Protected',
+    operating: 'Operating',
+    debt:      'Debt',
+    sinking:   'Sinking Funds',
+    wealth:    'Wealth Building',
   }
   return labels[group]
 }
@@ -61,6 +61,11 @@ export function effectiveDeficit(cat: Category): number {
     ? cat.target_amount
     : 0
   return currentDeficit + prefund
+}
+
+/** A pre-allocated tax reserve: protected layer AND a tax-shaped name. */
+export function isTaxCategory(cat: Category): boolean {
+  return cat.group_name === 'protected' && isTaxCategoryName(cat.name)
 }
 
 export function urgencyScore(cat: Category): number {
@@ -113,7 +118,10 @@ export function computeAllocations(
   const round2 = (n: number) => parseFloat(n.toFixed(2))
 
   // Score and allocate by urgency (uses effectiveDeficit for pre-funding)
-  const nonTax = active.filter(c => c.group_name !== 'taxes')
+  // Tax reserves are pre-allocated upstream in /api/allocate, so they are excluded
+  // here. Matching is by name, not by layer — the protected layer also holds the
+  // emergency fund, which very much should receive an allocation.
+  const nonTax = active.filter(c => !isTaxCategory(c))
   const scored = nonTax
     .map(cat => ({ cat, score: urgencyScore(cat) }))
     .filter(x => x.score > 0)
@@ -139,7 +147,7 @@ export function computeAllocations(
   // Step 3: Remainder to emergency fund or first goal
   if (remaining >= 0.01) {
     const emergencyFund = categories.find(c => c.name.toLowerCase().includes('emergency'))
-    const target = emergencyFund ?? categories.find(c => c.group_name === 'goals')
+    const target = emergencyFund ?? categories.find(c => c.group_name === 'sinking')
     if (target) {
       const existing = suggestions.find(s => s.category_id === target.id)
       if (existing) {

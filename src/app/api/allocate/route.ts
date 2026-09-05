@@ -50,6 +50,16 @@ INCOME CONTEXT:
 ${preAllocSummary}
 - Remaining for you to allocate: $${remainingForAI}
 
+MONEY LAYERS — every category belongs to one, and this is the funding waterfall:
+  1. protected — taxes and the emergency fund (tax reserves are ALREADY handled upstream)
+  2. operating — this month's living costs: rent, groceries, bills, then discretionary
+  3. debt      — paying down credit cards and loans
+  4. sinking   — dated future commitments: gifts, trips, courses, big purchases
+  5. wealth    — long-term: TFSA, FHSA, RRSP, down payment, retirement
+
+Work down the waterfall: do not fund a lower layer while an upper layer still has an
+urgent unmet deficit. Within a layer, priority and days_until_due decide the order.
+
 ALLOCATION RULES:
 1. Fund P1 and P2 categories before P3–P5, but read rules 2–4 carefully first
 
@@ -60,7 +70,7 @@ ALLOCATION RULES:
 
 3. PRIORITY & PRE-FUNDING — high-priority recurring categories near end of cycle come FIRST:
    - If is_pre_funding_next_cycle = true AND priority ≤ 2: fund before any P3+ categories
-   - Monthly bills (rent, groceries, etc.) with days_until_due ≤ 10: pre-fund them fully before lifestyle/goals
+   - Monthly operating costs (rent, groceries, etc.) with days_until_due ≤ 10: pre-fund them fully before any discretionary (P4–P5), sinking or wealth category
    - Quarterly with days_until_due ≤ 21: same treatment
 
 4. FREQUENCY & AMORTIZATION — for categories NOT near end of cycle:
@@ -73,7 +83,7 @@ ALLOCATION RULES:
    - days_until_due > 180 → low urgency
    - percent_funded ≥ 90 AND days_until_due ≤ 14 AND is_pre_funding_next_cycle = false → SKIP
 
-6. Route any surplus to Emergency Fund or first Goals category
+6. Route any surplus to the Emergency Fund, else the first sinking-layer category
 7. HARD LIMIT: allocations must sum to exactly $${remainingForAI}. Check your math.
 
 BUDGET CATEGORIES (taxes already handled — only allocate to these):
@@ -84,7 +94,7 @@ Return allocations only for categories receiving > $0. Keep reasoning under 60 c
 
 // Finds a tax category by a keyword in its name (case-insensitive, taxes group only)
 function findTaxCat(cats: Category[], keyword: string): Category | undefined {
-  return cats.find(c => c.group_name === 'taxes' && c.name.toLowerCase().includes(keyword.toLowerCase()))
+  return cats.find(c => c.group_name === 'protected' && c.name.toLowerCase().includes(keyword.toLowerCase()))
 }
 
 export async function POST(request: Request) {

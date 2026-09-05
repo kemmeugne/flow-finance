@@ -2,8 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { AlertTriangle, PlusCircle, TrendingUp, CalendarClock, Wallet } from 'lucide-react'
 import { formatCurrency, urgencyScore } from '@/lib/finance'
-import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
+import { GROUP_CONFIG, GROUP_ORDER, layerConfig } from '@/lib/group-config'
 import { getAccountGroup } from '@/lib/account-config'
+import { computeAvailableToSpend, computeRunway } from '@/lib/planning'
 import { LogExpenseButton } from '@/components/layout/log-expense-button'
 import { AffordButton } from '@/components/layout/afford-button'
 import { ResetDataButton } from '@/components/layout/reset-data-button'
@@ -39,6 +40,9 @@ export default async function DashboardPage() {
   const totalAssets     = cashTotal + investTotal
   const totalLiabilities = creditTotal + loanTotal
   const netWorth        = totalAssets - totalLiabilities
+
+  const spend  = computeAvailableToSpend(cats, accounts)
+  const runway = computeRunway(cats)
 
   const totalBalance    = cats.reduce((s, c) => s + c.current_balance, 0)
   const totalTarget     = cats.reduce((s, c) => s + c.target_amount, 0)
@@ -81,6 +85,81 @@ export default async function DashboardPage() {
             <PlusCircle className="w-4 h-4" />
             Add Income
           </Link>
+        </div>
+      </div>
+
+      {/* Available to spend — the headline number */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-2 bg-card rounded-xl border border-border p-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Actually available
+              </p>
+              <p className={`text-3xl font-bold mt-1 ${spend.available >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {formatCurrency(spend.available)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatCurrency(spend.cash)} in cash − {formatCurrency(spend.spokenFor)} spoken for
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Unassigned cash: <span className="font-medium text-foreground">{formatCurrency(spend.unassigned)}</span>
+              </p>
+            </div>
+
+            {spend.byLayer.length > 0 && (
+              <div className="min-w-[160px] space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                  Spoken for
+                </p>
+                {spend.byLayer.map(l => (
+                  <div key={l.layer} className="flex items-center justify-between gap-4 text-xs">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className={`w-1.5 h-1.5 rounded-full ${GROUP_CONFIG[l.layer as CategoryGroup].dot}`} />
+                      {l.label}
+                    </span>
+                    <span className="font-medium text-foreground">{formatCurrency(l.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {spend.drifted && (
+            <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Your categories claim {formatCurrency(spend.assigned)} but your accounts hold{' '}
+              {formatCurrency(spend.assets)}. Reconcile an account or adjust a category balance.
+            </p>
+          )}
+        </div>
+
+        {/* Runway */}
+        <div className="bg-card rounded-xl border border-border p-5">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+            Runway
+          </p>
+          {!runway.hasData ? (
+            <p className="text-xs text-muted-foreground">
+              Set target amounts and due frequencies on your Operating categories to see how many
+              months you have covered.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <RunwayBar label="This month funded" pct={runway.thisMonthPct} />
+              <RunwayBar label="Next month funded" pct={runway.nextMonthPct} />
+              <div className="pt-1 flex items-baseline justify-between">
+                <span className="text-xs text-muted-foreground">Emergency runway</span>
+                <span className={`text-sm font-bold ${
+                  runway.emergencyMonths >= 3 ? 'text-emerald-600'
+                  : runway.emergencyMonths >= 1 ? 'text-amber-600' : 'text-rose-600'}`}>
+                  {runway.emergencyMonths.toFixed(1)} months
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatCurrency(runway.monthlyNeed)}/month operating cost
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -181,7 +260,7 @@ export default async function DashboardPage() {
                 ? Math.min(100, Math.round((cat.current_balance / cat.target_amount) * 100))
                 : 100
               const deficit = Math.max(0, cat.target_amount - cat.current_balance)
-              const cfg = GROUP_CONFIG[cat.group_name as CategoryGroup]
+              const cfg = layerConfig(cat.group_name)
               const urgent = days <= 7
 
               return (
@@ -243,13 +322,16 @@ export default async function DashboardPage() {
         return (
           <section key={group}>
             {/* Group header */}
-            <div className="flex items-center gap-2 mb-3">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg.badge}`}>
-                {cfg.label}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {formatCurrency(items.reduce((s, c) => s + c.current_balance, 0))} funded
-              </span>
+            <div className="mb-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg.badge}`}>
+                  {cfg.label}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {formatCurrency(items.reduce((s, c) => s + c.current_balance, 0))} funded
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{cfg.blurb}</p>
             </div>
 
             {/* Cards grid */}
@@ -331,6 +413,21 @@ export default async function DashboardPage() {
           <ResetDataButton />
         </div>
       </section>
+    </div>
+  )
+}
+
+function RunwayBar({ label, pct }: { label: string; pct: number }) {
+  const color = pct >= 100 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#F43F5E'
+  return (
+    <div>
+      <div className="flex justify-between items-baseline mb-1">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-xs font-semibold" style={{ color }}>{Math.round(pct)}%</span>
+      </div>
+      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
     </div>
   )
 }

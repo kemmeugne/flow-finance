@@ -154,7 +154,7 @@ export default function AccountsPage() {
           .insert({
             user_id: user.id,
             name: `${form.name.trim()} Payment`,
-            group_name: 'bills',
+            group_name: 'debt',
             target_amount: parseFloat(form.min_payment) || 0,
             current_balance: 0,
             priority: 2,
