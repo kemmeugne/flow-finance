@@ -69,7 +69,8 @@ src/
 │   │   ├── mobile-header.tsx         # Mobile hamburger + Sheet drawer
 │   │   ├── log-expense-button.tsx    # Sheet: log expense → deducts from category balance; detects payment categories
 │   │   ├── assign-funds-sheet.tsx    # Sheet: assign existing cash account money to categories (manual or AI)
-│   │   └── afford-button.tsx         # Sheet: ask Claude if a purchase is affordable
+│   │   ├── afford-button.tsx         # Sheet: ask Claude if a purchase is affordable
+│   │   └── reset-data-button.tsx     # Dialog: two-step confirmed wipe of all user data + optional reseed
 │   └── ui/                           # shadcn/ui components (button, dialog, sheet, etc.)
 ├── lib/
 │   ├── finance.ts                    # formatCurrency, urgencyScore, computeAllocations (no tax step — handled upstream)
@@ -102,6 +103,14 @@ supabase/
 - **Net worth widget**: 3 cards (Net Worth, Assets, Liabilities) shown when accounts exist; setup prompt with link to /accounts if not
 - Header action buttons: **Add Income**, **Log Expense**, **Can I afford this?**
 - Category group cards with colored left border, progress bars, priority badge, due-soon badge (≤14 days)
+- **Start over (danger zone)** at the bottom: `ResetDataButton` — erases all financial data so the user can rebuild their plan
+
+### Reset all data (dialog, from Dashboard danger zone)
+Two-step confirmation before anything is deleted:
+1. **Warning step** — live counts of what will be destroyed (categories, accounts, income events, transactions, account transfers). States that the account, password and tax settings are kept.
+2. **Final step** — user must type `RESET` to enable the delete button; checkbox (on by default) to restore the 24 default starter categories afterwards.
+
+Deletes in FK-safe order: `account_transfers` → `transactions` → `income_events` (cascades `allocations`) → `accounts` → `categories`. Then optionally calls `seed_default_categories` RPC. All deletes are scoped by `user_id` and further constrained by RLS. Aborts with an inline error if any step fails.
 
 ### Accounts (`/accounts`)
 - Full CRUD for 15 account types across 4 groups: Cash (checking/savings/cash), Credit (credit card/LOC), Loans (mortgage/auto/student/personal/medical/other), Investments (TFSA/FHSA/RRSP/RDSP/other)

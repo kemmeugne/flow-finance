@@ -6,6 +6,7 @@ import { GROUP_CONFIG, GROUP_ORDER } from '@/lib/group-config'
 import { getAccountGroup } from '@/lib/account-config'
 import { LogExpenseButton } from '@/components/layout/log-expense-button'
 import { AffordButton } from '@/components/layout/afford-button'
+import { ResetDataButton } from '@/components/layout/reset-data-button'
 import type { Category, CategoryGroup, Account } from '@/lib/supabase/types'
 
 function fundedPct(cat: Category) {
@@ -316,6 +317,20 @@ export default async function DashboardPage() {
           </section>
         )
       })}
+
+      {/* Danger zone */}
+      <section className="pt-4 border-t border-border">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Start over</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+              Erase every category, account, income event and transaction so you can rebuild
+              your financial plan from scratch. This cannot be undone.
+            </p>
+          </div>
+          <ResetDataButton />
+        </div>
+      </section>
     </div>
   )
 }
