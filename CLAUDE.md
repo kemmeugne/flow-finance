@@ -91,6 +91,7 @@ supabase/
 ├── migration-accounts.sql            # Adds accounts + account_transfers tables; adds account_id to income_events + transactions
 ├── migration-tax-settings.sql        # Adds federal_tax_percent + provincial_tax_percent to user_settings
 ├── migration-layers.sql              # Replaces the 6 groups with the 5 money layers (one-way, transactional)
+├── migration-priority-convention.sql # Retro-applies the P1–P5 convention; snapshots priorities for rollback
 └── email-confirm-signup.html         # Branded confirmation email template (paste into Supabase)
 ```
 
@@ -338,6 +339,7 @@ which is what makes "Actually available" computable.
 2. `supabase/migration-accounts.sql` — adds accounts + account_transfers + account_id columns
 3. `supabase/migration-tax-settings.sql` — adds federal_tax_percent + provincial_tax_percent to user_settings
 4. `supabase/migration-layers.sql` — **one-way**: remaps `group_name` to the five layers, swaps the CHECK constraint, rewrites `seed_default_categories`
+5. `supabase/migration-priority-convention.sql` — retro-applies the priority convention. Snapshots into `categories_priority_backup` first; a rollback query is at the bottom of the file.
 
 Note: `schema.sql` still declares the OLD six groups. It is the historical baseline; migration 4 replaces them. Do not "fix" it.
 
@@ -356,6 +358,27 @@ negative `transactions` row for a payment *and* an `account_transfers` row, whil
 counted every negative transaction — so a Visa purchase logged to Groceries was counted again
 when the Visa was paid. Analytics now excludes any transaction whose id appears in
 `account_transfers.transaction_id`. Keep that filter if you touch the analytics query.
+
+## Priority convention
+
+`priority` is not decorative — `urgencyScore` multiplies by `6 - priority`, so P1 pulls 5× a P5.
+
+| P | Meaning | Typically |
+|---|---|---|
+| 1 | Must be funded | Tax reserves, rent, monthly essentials, debt minimums |
+| 2 | Safety | Emergency fund |
+| 3 | Near-term commitments | Sinking funds due inside 12 months |
+| 4 | Medium-term | Sinking funds beyond 12 months, discretionary spending |
+| 5 | Long-term wealth | TFSA, FHSA, RRSP, down payment, retirement |
+
+**Known wart:** discretionary operating categories (Shopping, Coffee) sit at P5 next to
+long-term wealth, because the convention has no level below P5. Since `urgencyScore` also
+weighs days-until-due, a monthly discretionary category can out-pull a no-deadline TFSA at
+the same priority. Fix by demoting wealth or adding a sixth level if it becomes a problem.
+
+The retroactive migration infers operating essentials from the *existing* priority (≤2 →
+P1), because `migration-layers.sql` collapsed bills/living/lifestyle and destroyed that
+distinction in the data.
 
 ## Allocation logic (`src/lib/finance.ts`)
 

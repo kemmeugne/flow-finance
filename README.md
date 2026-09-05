@@ -113,6 +113,7 @@ Run these in the Supabase SQL Editor, in order:
 2. `supabase/migration-accounts.sql` — accounts and account transfers
 3. `supabase/migration-tax-settings.sql` — federal/provincial tax split
 4. `supabase/migration-layers.sql` — replaces the six groups with the five money layers
+5. `supabase/migration-priority-convention.sql` — applies the P1–P5 funding convention
 
 > Migration 4 is **one-way** and must be applied *before* deploying code that expects layers.
 > `schema.sql` still declares the old six groups on purpose — it is the historical baseline.
