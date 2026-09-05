@@ -80,6 +80,22 @@ Categories with a due date in the next 45 days, sorted by how soon they're due. 
 - **Log Expense** — record a purchase against a category
 - **Can I afford this?** — ask the AI whether a purchase is a good idea right now
 
+**Start over (bottom of the page)**
+A **Reset all data** button that erases your entire financial plan so you can rebuild it from
+scratch — useful if your first setup no longer matches how you actually budget.
+
+Because this cannot be undone, it asks twice:
+1. A warning screen listing exactly how many categories, accounts, income events, transactions
+   and transfers will be deleted.
+2. A final screen where you must type `RESET` before the delete button becomes clickable.
+
+A checkbox (on by default) puts the standard starter categories back afterwards, so you land on
+a fresh budget rather than an empty app. Your login, password and tax settings are kept — only
+your financial data is erased.
+
+> There is no undo and no backup. If you might want your history later, export it first from
+> **Transactions → Export CSV**.
+
 ---
 
 ### Accounts
@@ -235,11 +251,15 @@ The 8 highest-spend categories in the period, ranked with colored bars.
 
 ### Settings
 
-**Tax Carve-out %**
-The percentage of every income payment reserved for taxes before anything else is allocated. Default 27% — a reasonable starting point for a Canadian freelancer at $60,000–$80,000/year.
+**Income Tax Carve-out**
+The share of every income payment reserved for taxes before anything else is allocated. It is
+split into two separate percentages, each routed to its own category:
 
-- Use the slider or type a number (range: 5% to 50%)
-- Live example: "On a $5,000 income, $1,350 goes to taxes, leaving $3,650 to allocate"
+- **Federal Income Tax** — slider or number, 0% to 40%. Default 15%. (Canada: 15–33%)
+- **Provincial Income Tax** — slider or number, 0% to 25%. Default 12%. (Canada: 5–25%)
+
+A live example breaks down a $5,000 income into federal, provincial, total reserved, and what
+is left available to allocate.
 
 > You can also bypass this per income entry using the **Taxable income toggle** on the Add Income form.
 
@@ -315,7 +335,7 @@ As a freelancer, a portion of every payment belongs to the government. The tax c
 Edit any amount on the review screen before confirming. Or choose "Assign manually" to start from scratch with $0 in every category.
 
 **Can I use this if I have a regular salary?**
-Yes. Enter your net salary as income each pay period and set your tax carve-out to 0% (tax is already deducted at source), or use the Taxable toggle.
+Yes. Enter your net salary as income each pay period and set both the federal and provincial percentages to 0% (tax is already deducted at source), or use the Taxable toggle.
 
 **What is the difference between account balance and category balance?**
 The account balance is the real-world number (what your bank says). Category balances are your budget envelopes — how that money is designated. They track in parallel. Logging income updates both (account gets the deposit, categories get funded). Logging a regular expense only updates the category. Logging a debt payment updates both the cash account and the debt account.
@@ -325,6 +345,16 @@ The app allows negative balances. It means you spent more than you allocated to 
 
 **What happens to history if I archive a category or account?**
 History is preserved. Archived items are hidden from the UI but all their transactions remain in your records.
+
+**How do I start my whole plan over?**
+Scroll to the bottom of the dashboard and use **Reset all data** under "Start over". It deletes
+every category, account, income event, transaction and transfer, then optionally restores the
+default starter categories. You have to confirm twice and type `RESET` to go through with it.
+
+**Can I undo a reset?**
+No. The deletion is permanent and there is no backup. Export your history from **Transactions →
+Export CSV** first if you may want it later. Your account itself is not deleted — you stay
+logged in and your tax settings are preserved.
 
 **Is my data private?**
 Yes. All database queries are protected by Row Level Security (RLS) — you only ever see your own data. AI calls send only your budget numbers (no personal details) to Anthropic's API.
